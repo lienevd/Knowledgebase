@@ -3,16 +3,22 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-STORAGE_FILE = "data/documents.json"
+STORAGE_FILE = Path("data") / "documents.json"
+UPLOAD_DIR = Path("data") / "uploads"
 
 def ensure_storage_dir():
     """Ensure storage directory exists"""
-    os.makedirs(os.path.dirname(STORAGE_FILE), exist_ok=True)
+    STORAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_upload_dir():
+    """Ensure upload directory exists"""
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def load_documents() -> Dict:
     """Load all stored documents from storage file"""
     ensure_storage_dir()
-    if os.path.exists(STORAGE_FILE):
+    if STORAGE_FILE.exists():
         with open(STORAGE_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
@@ -23,13 +29,24 @@ def save_documents(documents: Dict):
     with open(STORAGE_FILE, 'w', encoding='utf-8') as f:
         json.dump(documents, f, indent=2, ensure_ascii=False)
 
-def store_document(document_id: str, filename: str, content: str, keyword_scores: Dict[str, int]):
+def save_uploaded_file(document_id: str, filename: str, file_bytes: bytes) -> str:
+    """Save raw uploaded file bytes to the uploads folder and return the path."""
+    ensure_upload_dir()
+    safe_name = f"{document_id}_{Path(filename).name}"
+    upload_path = UPLOAD_DIR / safe_name
+    with open(upload_path, "wb") as out_file:
+        out_file.write(file_bytes)
+    return str(upload_path)
+
+
+def store_document(document_id: str, filename: str, content: str, keyword_scores: Dict[str, int], file_path: Optional[str] = None):
     """Store a new document"""
     documents = load_documents()
     documents[document_id] = {
         "filename": filename,
         "content": content,
-        "keyword_scores": keyword_scores
+        "keyword_scores": keyword_scores,
+        "file_path": file_path
     }
     save_documents(documents)
 

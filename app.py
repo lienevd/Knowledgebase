@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
+import json
 import uuid
 from pathlib import Path
 from typing import List
@@ -15,6 +16,7 @@ app = FastAPI()
 async def home():
     keyword_options = "".join(f'<option value="{kw}">\n' for kw in KEYWORDS)
     keyword_hint = ", ".join(f"<strong>{kw}</strong>" for kw in KEYWORD_EXAMPLES)
+    keyword_js = json.dumps(KEYWORDS)
 
     page_html = """
     <!DOCTYPE html>
@@ -316,23 +318,195 @@ async def home():
             .search-input-group {
                 display: flex;
                 gap: 10px;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
+                align-items: flex-start;
+            }
+
+            .search-dropdown {
+                position: relative;
+                width: 100%;
+            }
+
+            .suggestions {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                max-height: 240px;
+                overflow-y: auto;
+                background: white;
+                border: 1px solid #e0e0e0;
+                border-top: 0;
+                border-radius: 0 0 8px 8px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+                z-index: 10;
+                display: none;
+            }
+
+            .suggestions.show {
+                display: block;
+            }
+
+            .suggestion-item {
+                padding: 12px 15px;
+                cursor: pointer;
+                color: #333;
+                border-bottom: 1px solid #f3f4f7;
+            }
+
+            .suggestion-item:last-child {
+                border-bottom: none;
+            }
+
+            .suggestion-item:hover {
+                background: #f4f6fb;
             }
 
             input[type="text"] {
-                flex: 1;
-                padding: 12px 15px;
+                width: 100%;
+                padding: 14px 16px;
                 border: 2px solid #e0e0e0;
                 border-radius: 8px;
                 font-size: 1em;
                 transition: all 0.3s ease;
+                background: white;
             }
 
             .search-hint {
-                color: #666;
+                color: #5f6d88;
                 font-size: 0.92em;
                 margin-bottom: 20px;
                 line-height: 1.5;
+            }
+
+            .search-result.collapsible-result {
+                display: block;
+                border-left: 4px solid #9c27b0;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+            }
+
+            .search-result.collapsible-result summary {
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                list-style: none;
+                font-size: 1em;
+                font-weight: 600;
+                color: #333;
+            }
+
+            .search-result.collapsible-result summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .search-result.collapsible-result summary .collapse-label {
+                color: #4f5b76;
+                font-size: 0.95em;
+                font-weight: 500;
+            }
+
+            .search-result.collapsible-result[open] {
+                background: #f8f9ff;
+            }
+
+            .search-result.collapsible-result .result-content {
+                margin-top: 20px;
+                color: #555;
+                line-height: 1.6;
+            }
+
+            .result-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin-top: 15px;
+            }
+
+            .preview-btn,
+            .download-btn {
+                padding: 10px 18px;
+                border-radius: 8px;
+                border: none;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-weight: 600;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .preview-btn {
+                background: #667eea;
+                color: white;
+            }
+
+            .preview-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+            }
+
+            .download-btn {
+                background: #f4f6fb;
+                color: #333;
+                border: 1px solid #d9e2f5;
+            }
+
+            .download-btn:hover {
+                background: #e9efff;
+            }
+
+            .modal {
+                position: fixed;
+                inset: 0;
+                display: none;
+                justify-content: center;
+                align-items: center;
+                background: rgba(10, 18, 40, 0.6);
+                z-index: 50;
+                padding: 20px;
+            }
+
+            .modal.show {
+                display: flex;
+            }
+
+            .modal-content {
+                background: white;
+                border-radius: 16px;
+                max-width: 760px;
+                width: 100%;
+                max-height: 80vh;
+                overflow-y: auto;
+                padding: 25px;
+                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.18);
+            }
+
+            .close-modal {
+                border: none;
+                background: none;
+                font-size: 1.8em;
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                cursor: pointer;
+                color: #667eea;
+            }
+
+            .modal-title {
+                margin-bottom: 15px;
+                color: #24325a;
+                font-size: 1.3em;
+                font-weight: 700;
+            }
+
+            .modal-text {
+                color: #4f5b76;
+                line-height: 1.7;
+                white-space: pre-wrap;
             }
 
             .search-stats {
@@ -492,13 +666,13 @@ async def home():
 
                 <!-- Search Tab -->
                 <div id="search-tab" class="tab-content">
-                    <div class="search-section">
+                        <div class="search-section">
                         <h3 style="margin-bottom: 20px;">🔍 Search Documents</h3>
                         <div class="search-input-group">
-                            <input type="text" id="search-input" list="keyword-examples" placeholder="Try security, risk, encryption...">
-                            <datalist id="keyword-examples">
-                                __KEYWORD_OPTIONS__
-                            </datalist>
+                            <div class="search-dropdown">
+                                <input type="text" id="search-input" placeholder="Search keywords...">
+                                <div id="search-suggestions" class="suggestions"></div>
+                            </div>
                             <button class="btn-primary" id="search-btn">Search</button>
                         </div>
                         <div class="search-hint">Examples: __KEYWORD_HINT__</div>
@@ -513,6 +687,14 @@ async def home():
 
                     <div id="search-results-container">
                         <!-- Search results will be populated here -->
+                    </div>
+
+                    <div id="preview-modal" class="modal">
+                        <div class="modal-content">
+                            <button class="close-modal" aria-label="Close preview">×</button>
+                            <div class="modal-title" id="preview-title"></div>
+                            <div class="modal-text" id="preview-text"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -550,9 +732,15 @@ async def home():
             // Search Tab Elements
             const searchInput = document.getElementById('search-input');
             const searchBtn = document.getElementById('search-btn');
+            const searchSuggestions = document.getElementById('search-suggestions');
             const searchLoading = document.getElementById('search-loading');
             const searchError = document.getElementById('search-error');
             const searchResultsContainer = document.getElementById('search-results-container');
+            const previewModal = document.getElementById('preview-modal');
+            const previewTitle = document.getElementById('preview-title');
+            const previewText = document.getElementById('preview-text');
+            const closeModal = document.querySelector('.close-modal');
+            const keywordSuggestions = [__KEYWORD_OPTIONS_JS__];
 
             // Upload area click
             uploadArea.addEventListener('click', () => fileInput.click());
@@ -665,9 +853,63 @@ async def home():
 
             // Search functionality
             searchBtn.addEventListener('click', performSearch);
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') performSearch();
+            searchInput.addEventListener('input', updateSuggestionList);
+            searchInput.addEventListener('focus', updateSuggestionList);
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    performSearch();
+                }
             });
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-dropdown')) {
+                    searchSuggestions.classList.remove('show');
+                }
+            });
+            closeModal.addEventListener('click', () => previewModal.classList.remove('show'));
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) {
+                    previewModal.classList.remove('show');
+                }
+            });
+            searchSuggestions.addEventListener('click', (e) => {
+                const option = e.target.closest('.suggestion-item');
+                if (option) {
+                    searchInput.value = option.textContent.trim();
+                    searchSuggestions.classList.remove('show');
+                    performSearch();
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                const previewBtn = e.target.closest('.preview-button');
+                if (previewBtn) {
+                    e.preventDefault();
+                    openPreview(previewBtn.dataset.title, decodeURIComponent(previewBtn.dataset.preview));
+                }
+            });
+
+            function updateSuggestionList() {
+                const query = searchInput.value.trim().toLowerCase();
+                const filtered = keywordSuggestions.filter((keyword) => keyword.includes(query));
+                const suggestions = filtered.slice(0, 12);
+
+                if (!suggestions.length) {
+                    searchSuggestions.classList.remove('show');
+                    return;
+                }
+
+                searchSuggestions.innerHTML = suggestions
+                    .map((keyword) => `<div class="suggestion-item">${keyword}</div>`)
+                    .join('');
+                searchSuggestions.classList.add('show');
+            }
+
+            function openPreview(title, text) {
+                previewTitle.textContent = title;
+                previewText.textContent = text || 'No preview available.';
+                previewModal.classList.add('show');
+            }
 
             async function performSearch() {
                 const keyword = searchInput.value.trim();
@@ -679,6 +921,7 @@ async def home():
                 searchLoading.style.display = 'block';
                 searchResultsContainer.innerHTML = '';
                 searchError.classList.remove('show');
+                searchSuggestions.classList.remove('show');
 
                 try {
                     const response = await fetch(`/search?keyword=${encodeURIComponent(keyword)}`);
@@ -768,18 +1011,21 @@ async def home():
     </html>
     """
 
-    return page_html.replace("__KEYWORD_OPTIONS__", keyword_options).replace("__KEYWORD_HINT__", keyword_hint)
+    return page_html.replace("__KEYWORD_OPTIONS__", keyword_options).replace("__KEYWORD_HINT__", keyword_hint).replace("__KEYWORD_OPTIONS_JS__", keyword_js)
+
+
+@app.post("/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
     """Upload multiple documents and store them locally"""
     uploaded_files = []
     skipped_files = []
     
     for file in files:
         try:
-            content = await file.read()
+            content_bytes = await file.read()
             document_id = str(uuid.uuid4())
-            text = content.decode(errors="ignore")
+            text = content_bytes.decode(errors="ignore")
             
-            # Use the keyword list loaded from the CSV file
             keywords = KEYWORDS if KEYWORDS else [
                 "security",
                 "risk",
@@ -792,10 +1038,10 @@ async def home():
             for keyword in keywords:
                 scores[keyword] = text.lower().count(keyword)
             
-            # Store the document locally
-            store_document(document_id, file.filename, text, scores)
+            file_path = save_uploaded_file(document_id, file.filename, content_bytes)
+            store_document(document_id, file.filename, text, scores, file_path=file_path)
             uploaded_files.append(file.filename)
-        except Exception as e:
+        except Exception:
             skipped_files.append(f"{file.filename} (error)")
     
     return {
@@ -803,6 +1049,18 @@ async def home():
         "uploaded_files": uploaded_files,
         "skipped_files": skipped_files
     }
+
+
+@app.get("/download")
+async def download(document_id: str):
+    """Download a stored uploaded document."""
+    document = get_document(document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    file_path = document.get("file_path")
+    if not file_path or not Path(file_path).exists():
+        raise HTTPException(status_code=404, detail="File not available")
+    return FileResponse(path=file_path, filename=document.get("filename", "document"), media_type="application/octet-stream")
 
 
 @app.get("/search")

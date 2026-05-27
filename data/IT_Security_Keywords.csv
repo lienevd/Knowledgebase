@@ -1,0 +1,45 @@
+00.Cybersecurity;01.Vulnerabilities;02.Threats;03.Identity;04.Governance;05.Network;06.Data;07.Monitoring;08.Incident Response;09.Cloud Security;10.Application Security;11.Physical Security;12.Human Factors
+cybersecurity;vulnerabilities;threats;identity;governance;network;anonymization;monitoring;response;cloud security;api security;physical security;awareness measurement
+antivirus;attack vector;advanced persistent threat;abac;adherence;barrier;audit;alert;business continuity;change psychology;application firewall;access control system;behavior modification
+archive;backdoor;adware;access;administration;bridge;authenticity;alert management;communication;cloud access security;application security;alarm system;behavioral analysis
+automation;breach;apt;access control;assessment;bridge device;availability;alerts;communication plan;cloud compliance;appsec;asset protection;behavioral risk
+blue team;broken authentication;botnet;access-control;audit trail;buffer zone;backup;analyses;containment;cloud configuration;authentication testing;badge reader;cognitive bias
+byod;buffer overflow;browser hijacking;account;authorization;capacity planning;analysis;anomaly detection;crisis management;cloud drift;automated testing;biometric access;behavioral risk
+cobit;configuration drift;business email compromise;adaptive authentication;change management;congestion control;classification;anomaly detection;csirt;cloud governance;automated testing;biometric scanner;behavioral risk
+cryptography;credential stuffing;clickbait;authentication;cobit;ddos protection;confidentiality;baseline;csirt;cloud governance;behavioral economics;biometric scanner;human error
+cyberattack;cve;clickjacking;authorization;compliance;dmz;data architecture;behavioral monitoring;damage assessment;cloud identity;blackbox testing;bollard;human factor
+cyberdefense;data exposure;command injection;behavioral analytics;configuration management;dns;data integration;compliance monitoring;disaster recovery;cloud monitoring;business logic abuse;building security;insider risk
+deception technology;default credentials;credential harvesting;biometric;continual improvement;error handling;data loss prevention;continuous monitoring;emergency exit;cloud orchestration;ci/cd;card reader;insider threat
+defense in depth;design flaw;cross-site scripting;certificate;control;fault tolerance;data masking;correlation;emergency lighting;cloud security posture;code review;cctv;negligence
+edr;exploit;crypto-mining;compliance framework;corrective action;firewall;data migration;dashboard;escalation;cloud vulnerability;container security;door control;negligent behavior
+endpoint;improper access;cyber attack;continuous authentication;directive;flow control;data modeling;data collection;evacuation;cloud workload protection;dependency scanning;door lock;organizational culture
+firewall-gateway;information disclosure;cyber espionage;credential;documentation;gateway;data retention;detection;evacuation plan;cognitive security;devsecops;electronic lock;peer influence
+forensics;injection;denial of service;credential management;emergency response;hub;data warehousing;endpoint monitoring;evaluation;compliance monitoring;dynamic analysis;entry control;phishing awareness
+hardening;insecure deserialization;distributed denial of service;digital identity;evaluation;intrusion detection;encryption;event correlation;exception management;configuration drift;error handling;environmental control;policy awareness
+honeypot;known vulnerability;drive-by download;directory services;exception handling;intrusion prevention;hashing;event management;forensics;cspm;infrastructure scanning;exit control;psychological safety
+iam;legacy system;email spoofing;federated identity;framework;load balancer;integration testing;forensic analysis;incident classification;data catalog;injection;facility monitoring;risk communication
+identification;logic error;fake antivirus;governance;governance framework;load balancing;integrity;identification;incident handling;data discovery;data classification;input validation;facility security;risk perception
+incident response;malicious code;fake news;identities;guideline;micro-segmentation;key management;incident detection;incident response;data discovery;incident response;interactive testing;fence;safety culture
+information assurance;misconfiguration;file inclusion;identity federation;incident management;nat;labeling;incident management;incident tracking;data governance;license scanning;fire suppression;security awareness
+machine learning;missing encryption;fileless malware;identity governance;iso27001;network isolation;logging;investigation;investigation process;data inventory;obfuscation;gate control;security behavior
+malware analysis;open redirect;hoax;identity lifecycle;issue management;network mapping;manual testing;log analysis;isolation;data lineage;output validation;guard;security champion
+network security;outdated software;insider threat;identity management;knowledge management;network monitoring;masking;log correlation;legal hold;data profiling;penetration testing;guard post;security culture
+patch management;password policy;logic bomb;identity proofing;law;network optimization;metadata;log management;lessons learned;data profiling;runtime protection;id verification;security culture assessment
+penetration testing;path traversal;malware;identity verification;mandate;network segmentation;monitoring;metrics;metrics collection;data quality;secrets management;intrusion alarm;security metrics
+protection;privilege escalation;man-in-the-middle;login;measurement;network topology;mutation testing;monitoring dashboard;notification;data residency;secure coding;key management;security mindset
+purple team;race condition;phishing;mfa;monitoring;packet filtering;normalization;network monitoring;post-incident;data stewardship;security controls;lighting control;security perception
+red team;security gap;ransomware;multifactor authentication;oversight;perimeter;obfuscation;performance dashboard;recovery;deduplication;security testing;lock system;security training
+reverse engineering;session hijacking;rootkit;multi-factor authentication;policy;protocol analysis;personally identifiable information;performance monitoring;remediation;encryption in transit;session management;motion detector;situational awareness
+risk management;side channel;scareware;oauth;procedure;proxy;privacy;reference data;reporting;human-centered security;software composition;perimeter security;social engineering awareness
+sandbox;siem;session fixation;password;regulation;quality of service;proxies;regression testing;response plan;hybrid cloud;static analysis;physical access;training effectiveness
+security architecture;sql injection;social engineering;permission;review;redundancy;pseudonymization;reporting dashboard;restoration;infrastructure as code;threat intelligence;security camera;training program
+security controls;timing attack;spam;principal;risk assessment;reliability;recoveries;security dashboard;risk communication;lock down;threat modeling;security guard;trust
+security orchestration;unencrypted data;spyware;privileged access;risk management;router;redaction;security monitoring;runbook;master data management;vulnerability assessment;security lighting;user awareness
+security testing;unsecured api;supply chain attack;provisioning;standard;session management;restoration;security review;stakeholder communication;metadata management;vulnerability scanning;surveillance system;user behavior
+soc;use after free;trojan;rbac;strategy;switch;sanitization;soar;status reporting;multi-cloud;web application firewall;turnstile;vulnerability awareness
+surveillance;weak authentication;trojan-access;risk-based authentication;transparency;traffic analysis;software composition analysis;source code review;team;private cloud;whitebox testing;visitor management;workplace security
+threat hunting;weak cipher;typosquatting;role;validation;virtual lan;storage;system monitoring;threat hunting;public cloud;xss protection;zone control;
+threat intelligence;weak encryption;virus;single sign on;version control;vpn;tokenization;threat detection;training;saas;;;
+vulnerability;weak hashing;watering hole;token;vulnerability management;wan;token-substitution;trend analysis;triage;serverless;;;
+vulnerability scanning;weak randomization;worm;user;workflow;wireless security;version control;user activity monitoring;workflows;virtual machine;;;
+xdr;zero-day vulnerability;zero-day;verification;;zero trust;;visualization;;workload protection;;;
