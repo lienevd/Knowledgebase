@@ -961,12 +961,17 @@ async def home():
 
                 // Top document
                 if (data.top_document) {
+                    const top = data.top_document;
                     html += `
                         <div class="search-result top-document">
                             <h5>🏆 Top Match</h5>
-                            <div><strong>Document:</strong> ${data.top_document.filename}</div>
-                            <div class="keyword-count">Keyword count: ${data.top_document.keyword_count}</div>
-                            ${data.top_document.context ? `<div class="context">${escapeHtml(data.top_document.context)}</div>` : ''}
+                            <div><strong>Document:</strong> ${top.filename}</div>
+                            <div class="keyword-count">Keyword count: ${top.keyword_count}</div>
+                            ${top.context ? `<div class="context">${escapeHtml(top.context)}</div>` : ''}
+                            <div class="result-actions">
+                                <button class="preview-btn preview-button" data-title="${escapeHtml(top.filename)}" data-preview="${encodeURIComponent(top.context || 'No preview available.')}">Preview</button>
+                                <a class="download-btn" href="/download?document_id=${top.document_id}">Download</a>
+                            </div>
                         </div>
                     `;
                 }
@@ -975,7 +980,7 @@ async def home():
                 if (data.all_results.length > 1) {
                     const moreMatches = data.all_results.slice(1);
                     html += `
-                        <details class="search-result collapsible-result" style="padding: 0;">
+                        <details class="search-result collapsible-result">
                             <summary>
                                 <span>More matches (${moreMatches.length})</span>
                                 <span class="collapse-label">Click to expand</span>
@@ -986,6 +991,10 @@ async def home():
                                         <h5 style="margin-bottom: 10px;">${result.filename}</h5>
                                         <div class="keyword-count">${result.keyword_count} occurrences</div>
                                         ${result.context ? `<div class="context">${escapeHtml(result.context)}</div>` : '<div class="context">No preview available.</div>'}
+                                        <div class="result-actions">
+                                            <button class="preview-btn preview-button" data-title="${escapeHtml(result.filename)}" data-preview="${encodeURIComponent(result.context || 'No preview available.')}">Preview</button>
+                                            <a class="download-btn" href="/download?document_id=${result.document_id}">Download</a>
+                                        </div>
                                     </div>
                                 `).join('')}
                             </div>
