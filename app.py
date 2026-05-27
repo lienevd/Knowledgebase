@@ -1,13 +1,22 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
 import uuid
-from src.storage.document_store import store_document, search_keyword
+from pathlib import Path
+from typing import List
+from src.storage.document_store import store_document, search_keyword, save_uploaded_file, get_document
+from src.keywords.keyword_loader import load_keywords
+
+KEYWORDS = load_keywords()
+KEYWORD_EXAMPLES = KEYWORDS[:8] if KEYWORDS else ["security", "risk", "authentication", "encryption", "cloud"]
 
 app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    return """
+    keyword_options = "".join(f'<option value="{kw}">\n' for kw in KEYWORDS)
+    keyword_hint = ", ".join(f"<strong>{kw}</strong>" for kw in KEYWORD_EXAMPLES)
+
+    page_html = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -307,7 +316,7 @@ async def home():
             .search-input-group {
                 display: flex;
                 gap: 10px;
-                margin-bottom: 20px;
+                margin-bottom: 10px;
             }
 
             input[type="text"] {
@@ -317,6 +326,71 @@ async def home():
                 border-radius: 8px;
                 font-size: 1em;
                 transition: all 0.3s ease;
+            }
+
+            .search-hint {
+                color: #666;
+                font-size: 0.92em;
+                margin-bottom: 20px;
+                line-height: 1.5;
+            }
+
+            .search-stats {
+                background: #f4f6fb;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 10px;
+                border: 1px solid #e5e8f0;
+            }
+
+            .stat-value {
+                font-size: 1.5em;
+                font-weight: 700;
+                color: #3b4d6b;
+            }
+
+            .stat-label {
+                font-size: 0.85em;
+                color: #7a8699;
+                margin-top: 5px;
+            }
+
+            .search-result.collapsible-result {
+                border-left-color: #9c27b0;
+            }
+
+            .search-result.collapsible-result summary {
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                list-style: none;
+                font-size: 1em;
+                font-weight: 600;
+                color: #333;
+            }
+
+            .search-result.collapsible-result summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .search-result.collapsible-result summary .collapse-label {
+                color: #4f5b76;
+                font-size: 0.95em;
+                font-weight: 500;
+            }
+
+            .search-result.collapsible-result[open] {
+                background: #f8f9ff;
+            }
+
+            .search-result.collapsible-result .result-content {
+                margin-top: 15px;
+                color: #555;
+                line-height: 1.5;
             }
 
             input[type="text"]:focus {
@@ -368,32 +442,6 @@ async def home():
                 background: #f8f9ff;
                 border-radius: 8px;
             }
-
-            .search-stats {
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-            }
-
-            .stat-item {
-                text-align: center;
-            }
-
-            .stat-value {
-                font-size: 2em;
-                font-weight: 700;
-                color: #667eea;
-            }
-
-            .stat-label {
-                font-size: 0.85em;
-                color: #666;
-                margin-top: 5px;
-            }
         </style>
     </head>
     <body>
@@ -414,34 +462,30 @@ async def home():
                 <div id="upload-tab" class="tab-content active">
                     <div class="upload-area" id="upload-area">
                         <div class="upload-icon">📁</div>
-                        <h3>Drop your document here</h3>
+                        <h3>Drop documents here</h3>
                         <p>or click to browse</p>
-                        <input type="file" id="file-input" accept=".pdf,.doc,.docx,.txt">
+                        <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Select multiple files</p>
+                        <input type="file" id="file-input" accept=".pdf,.doc,.docx,.txt" multiple>
                     </div>
 
-                    <div class="file-name" id="file-name"></div>
+                    <div id="selected-files" style="margin: 20px 0;"></div>
 
                     <div class="btn-group">
-                        <button class="btn-primary" id="upload-btn" disabled>Analyze Document</button>
+                        <button class="btn-primary" id="upload-btn" disabled>Upload Documents</button>
                         <button class="btn-secondary" id="clear-btn">Clear</button>
                     </div>
 
                     <div class="loading" id="loading">
                         <div class="spinner"></div>
-                        <p>Analyzing document...</p>
+                        <p id="loading-text">Uploading documents...</p>
                     </div>
 
                     <div class="error" id="error"></div>
 
                     <div class="results" id="results">
                         <div class="result-item">
-                            <h4>📊 Analysis Results</h4>
-                            <div class="metadata">
-                                <div><strong>File:</strong> <span id="result-filename"></span></div>
-                                <div><strong>Document ID:</strong> <span id="result-docid"></span></div>
-                            </div>
-                            <h4 style="margin-top: 20px;">Keyword Scores</h4>
-                            <div class="keyword-scores" id="scores-container"></div>
+                            <h4>✅ Upload Successful</h4>
+                            <div id="upload-summary"></div>
                         </div>
                     </div>
                 </div>
@@ -451,9 +495,13 @@ async def home():
                     <div class="search-section">
                         <h3 style="margin-bottom: 20px;">🔍 Search Documents</h3>
                         <div class="search-input-group">
-                            <input type="text" id="search-input" placeholder="Enter keyword to search...">
+                            <input type="text" id="search-input" list="keyword-examples" placeholder="Try security, risk, encryption...">
+                            <datalist id="keyword-examples">
+                                __KEYWORD_OPTIONS__
+                            </datalist>
                             <button class="btn-primary" id="search-btn">Search</button>
                         </div>
+                        <div class="search-hint">Examples: __KEYWORD_HINT__</div>
                     </div>
 
                     <div class="loading" id="search-loading">
@@ -492,7 +540,7 @@ async def home():
             // Upload Tab Elements
             const uploadArea = document.getElementById('upload-area');
             const fileInput = document.getElementById('file-input');
-            const fileName = document.getElementById('file-name');
+            const selectedFilesDiv = document.getElementById('selected-files');
             const uploadBtn = document.getElementById('upload-btn');
             const clearBtn = document.getElementById('clear-btn');
             const loading = document.getElementById('loading');
@@ -511,7 +559,7 @@ async def home():
 
             // File input change
             fileInput.addEventListener('change', (e) => {
-                handleFileSelect(e.target.files[0]);
+                handleFileSelect(e.target.files);
             });
 
             // Drag and drop
@@ -528,31 +576,38 @@ async def home():
                 e.preventDefault();
                 uploadArea.classList.remove('dragover');
                 if (e.dataTransfer.files.length > 0) {
-                    handleFileSelect(e.dataTransfer.files[0]);
+                    handleFileSelect(e.dataTransfer.files);
                 }
             });
 
             // Handle file selection
-            function handleFileSelect(file) {
-                if (file) {
-                    fileName.textContent = '✓ Selected: ' + file.name;
-                    fileName.style.display = 'block';
+            function handleFileSelect(files) {
+                if (files && files.length > 0) {
+                    let html = '<div style="background: #f8f9ff; padding: 15px; border-radius: 8px;"><strong>Selected Files (' + files.length + '):</strong><ul style="margin: 10px 0 0 20px;">';
+                    for (let file of files) {
+                        html += '<li>' + file.name + ' (' + (file.size / 1024).toFixed(2) + ' KB)</li>';
+                    }
+                    html += '</ul></div>';
+                    selectedFilesDiv.innerHTML = html;
                     uploadBtn.disabled = false;
                     error.classList.remove('show');
                 }
             }
 
-            // Upload and analyze
+            // Upload documents
             uploadBtn.addEventListener('click', async () => {
-                const file = fileInput.files[0];
-                if (!file) return;
+                const files = fileInput.files;
+                if (!files || files.length === 0) return;
 
                 const formData = new FormData();
-                formData.append('file', file);
+                for (let file of files) {
+                    formData.append('files', file);
+                }
 
                 loading.style.display = 'block';
                 results.classList.remove('show');
                 error.classList.remove('show');
+                document.getElementById('loading-text').textContent = 'Uploading ' + files.length + ' document(s)...';
 
                 try {
                     const response = await fetch('/upload', {
@@ -565,36 +620,31 @@ async def home():
                     }
 
                     const data = await response.json();
-                    displayResults(data);
+                    displayUploadResults(data);
                 } catch (err) {
-                    showError('Failed to analyze document. Please try again.');
+                    showError('Failed to upload documents. Please try again.');
                 } finally {
                     loading.style.display = 'none';
                 }
             });
 
-            // Display results
-            function displayResults(data) {
-                document.getElementById('result-filename').textContent = data.filename;
-                document.getElementById('result-docid').textContent = data.document_id;
-
-                const scoresContainer = document.getElementById('scores-container');
-                scoresContainer.innerHTML = '';
-
-                const scores = data.keyword_scores;
-                const maxScore = Math.max(...Object.values(scores));
-
-                for (const [keyword, score] of Object.entries(scores)) {
-                    const percentage = (score / (maxScore || 1)) * 100;
-                    const card = document.createElement('div');
-                    card.className = 'score-card';
-                    card.innerHTML = `
-                        <div class="score-label">${keyword}</div>
-                        <div class="score-value">${score}</div>
-                    `;
-                    scoresContainer.appendChild(card);
+            // Display upload results
+            function displayUploadResults(data) {
+                let html = '<p style="margin-bottom: 15px;"><strong>' + data.uploaded_count + ' document(s) uploaded successfully!</strong></p>';
+                html += '<div style="background: #f8f9ff; padding: 15px; border-radius: 8px;">';
+                html += '<strong>Uploaded Files:</strong><ul style="margin: 10px 0 0 20px;">';
+                
+                data.uploaded_files.forEach(file => {
+                    html += '<li>' + file + '</li>';
+                });
+                
+                html += '</ul></div>';
+                
+                if (data.skipped_files && data.skipped_files.length > 0) {
+                    html += '<p style="color: #ff9800; margin-top: 15px;"><strong>⚠️ Skipped:</strong> ' + data.skipped_files.join(', ') + '</p>';
                 }
-
+                
+                document.getElementById('upload-summary').innerHTML = html;
                 results.classList.add('show');
             }
 
@@ -607,7 +657,7 @@ async def home():
             // Clear
             clearBtn.addEventListener('click', () => {
                 fileInput.value = '';
-                fileName.style.display = 'none';
+                selectedFilesDiv.innerHTML = '';
                 uploadBtn.disabled = true;
                 results.classList.remove('show');
                 error.classList.remove('show');
@@ -680,17 +730,24 @@ async def home():
 
                 // All results
                 if (data.all_results.length > 1) {
-                    html += '<h5 style="margin-top: 25px; margin-bottom: 15px;">All Results</h5>';
-                    data.all_results.forEach((result, index) => {
-                        if (index === 0) return; // Skip top result as it's already shown
-                        html += `
-                            <div class="search-result">
-                                <h5>${result.filename}</h5>
-                                <div class="keyword-count">${result.keyword_count} occurrences</div>
-                                ${result.context ? `<div class="context">${escapeHtml(result.context)}</div>` : ''}
+                    const moreMatches = data.all_results.slice(1);
+                    html += `
+                        <details class="search-result collapsible-result" style="padding: 0;">
+                            <summary>
+                                <span>More matches (${moreMatches.length})</span>
+                                <span class="collapse-label">Click to expand</span>
+                            </summary>
+                            <div class="result-content">
+                                ${moreMatches.map(result => `
+                                    <div class="search-result" style="margin: 15px 0; border-left-color: #9c27b0; padding: 15px;">
+                                        <h5 style="margin-bottom: 10px;">${result.filename}</h5>
+                                        <div class="keyword-count">${result.keyword_count} occurrences</div>
+                                        ${result.context ? `<div class="context">${escapeHtml(result.context)}</div>` : '<div class="context">No preview available.</div>'}
+                                    </div>
+                                `).join('')}
                             </div>
-                        `;
-                    });
+                        </details>
+                    `;
                 }
 
                 searchResultsContainer.innerHTML = html;
@@ -711,34 +768,40 @@ async def home():
     </html>
     """
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    content = await file.read()
-
-    document_id = str(uuid.uuid4())
-
-    text = content.decode(errors="ignore")
-
-    keywords = [
-        "security",
-        "risk",
-        "authentication",
-        "encryption",
-        "cloud"
-    ]
-
-    scores = {}
-
-    for keyword in keywords:
-        scores[keyword] = text.lower().count(keyword)
-
-    # Store the document locally
-    store_document(document_id, file.filename, text, scores)
-
+    return page_html.replace("__KEYWORD_OPTIONS__", keyword_options).replace("__KEYWORD_HINT__", keyword_hint)
+    """Upload multiple documents and store them locally"""
+    uploaded_files = []
+    skipped_files = []
+    
+    for file in files:
+        try:
+            content = await file.read()
+            document_id = str(uuid.uuid4())
+            text = content.decode(errors="ignore")
+            
+            # Use the keyword list loaded from the CSV file
+            keywords = KEYWORDS if KEYWORDS else [
+                "security",
+                "risk",
+                "authentication",
+                "encryption",
+                "cloud"
+            ]
+            
+            scores = {}
+            for keyword in keywords:
+                scores[keyword] = text.lower().count(keyword)
+            
+            # Store the document locally
+            store_document(document_id, file.filename, text, scores)
+            uploaded_files.append(file.filename)
+        except Exception as e:
+            skipped_files.append(f"{file.filename} (error)")
+    
     return {
-        "document_id": document_id,
-        "filename": file.filename,
-        "keyword_scores": scores
+        "uploaded_count": len(uploaded_files),
+        "uploaded_files": uploaded_files,
+        "skipped_files": skipped_files
     }
 
 
@@ -750,3 +813,11 @@ async def search(keyword: str):
     
     results = search_keyword(keyword)
     return results
+
+
+@app.get("/documents-count")
+async def get_documents_count():
+    """Get the count of stored documents"""
+    from src.storage.document_store import get_all_documents
+    documents = get_all_documents()
+    return {"total_documents": len(documents)}
