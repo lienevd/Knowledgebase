@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>IBC Document Intelligence</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <h1>📄 Document Intelligence</h1>
+
+        <p>IBC Document Analysis Platform</p>
+
+        <p class="subtitle">
+            Analyze security and risk keywords in your documents
+        </p>
+    </div>
+
+    <div class="content">
+
+        <div class="overview-grid">
+            <div class="overview-card">
+                <h3>Streamlined upload</h3>
+                <p>Drop files or browse to upload documents instantly with automatic text extraction and indexing.</p>
+            </div>
+            <div class="overview-card">
+                <h3>Keyword search</h3>
+                <p>Search across your document store with contextual snippets and ranked keyword results.</p>
+            </div>
+            <div class="overview-card">
+                <h3>Document insights</h3>
+                <p>Review summaries, inspect matching documents, and keep your workflow organized.</p>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="upload-tab">
+                📤 Upload Documents
+            </button>
+
+            <button class="tab-btn" data-tab="search-tab">
+                🔍 Search
+            </button>
+        </div>
+
+        <!-- Upload Tab -->
+        <div id="upload-tab" class="tab-content active">
+
+            <div class="upload-area" id="upload-area">
+
+                <div class="upload-icon">📁</div>
+
+                <h3>Drop documents here</h3>
+
+                <p>or click to browse</p>
+
+                <p class="small-text">
+                    Select multiple files
+                </p>
+
+                <input
+                    type="file"
+                    id="file-input"
+                    accept=".pdf,.doc,.docx,.txt"
+                    multiple
+                >
+            </div>
+
+            <div id="selected-files"></div>
+
+            <div class="btn-group">
+                <button class="btn-primary" id="upload-btn" disabled>
+                    Upload Documents
+                </button>
+
+                <button class="btn-secondary" id="clear-btn">
+                    Clear
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p id="loading-text">Uploading documents...</p>
+            </div>
+
+            <div class="error" id="error"></div>
+
+            <div class="results" id="results">
+                <div class="result-item">
+                    <h4>✅ Upload Successful</h4>
+                    <div id="upload-summary"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Tab -->
+        <div id="search-tab" class="tab-content">
+
+            <div class="search-section">
+
+                <h3>🔍 Search Documents</h3>
+
+                <div class="search-input-group">
+
+                    <div class="search-dropdown">
+
+                        <input
+                            type="text"
+                            id="search-input"
+                            placeholder="Type or choose a keyword..."
+                            autocomplete="off"
+                        >
+
+                        <div
+                            id="search-suggestions"
+                            class="suggestions"
+                        ></div>
+                    </div>
+
+                    <button class="btn-primary" id="search-btn">
+                        Search
+                    </button>
+                </div>
+
+                <div class="search-hint">
+                    Examples: {{ keyword_hint | safe }}
+                </div>
+            </div>
+
+            <div class="loading" id="search-loading">
+                <div class="spinner"></div>
+                <p>Searching documents...</p>
+            </div>
+
+            <div class="error" id="search-error"></div>
+
+            <div id="search-results-container"></div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const keywordSuggestions = {{ keywords | tojson }} || [];
+</script>
+
+<script src="/static/app.js"></script>
+
+</body>
+</html>

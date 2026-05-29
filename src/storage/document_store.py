@@ -39,21 +39,43 @@ def save_uploaded_file(document_id: str, filename: str, file_bytes: bytes) -> st
     return str(upload_path)
 
 
+def resolve_file_path(document_id: str, filename: str, file_path: Optional[str] = None) -> Optional[str]:
+    """Resolve the document file path, falling back to the uploads folder if needed."""
+    if file_path:
+        if Path(file_path).exists():
+            return file_path
+
+    fallback = UPLOAD_DIR / f"{document_id}_{Path(filename).name}"
+    if fallback.exists():
+        return str(fallback)
+
+    return None
+
+
 def store_document(document_id: str, filename: str, content: str, keyword_scores: Dict[str, int], file_path: Optional[str] = None):
     """Store a new document"""
     documents = load_documents()
+    resolved_path = resolve_file_path(document_id, filename, file_path)
     documents[document_id] = {
         "filename": filename,
         "content": content,
         "keyword_scores": keyword_scores,
-        "file_path": file_path
+        "file_path": resolved_path
     }
     save_documents(documents)
+
 
 def get_document(document_id: str) -> Optional[Dict]:
     """Retrieve a specific document"""
     documents = load_documents()
-    return documents.get(document_id)
+    document = documents.get(document_id)
+    if document and document.get("file_path") is None and document.get("filename"):
+        resolved_path = resolve_file_path(document_id, document["filename"], None)
+        if resolved_path:
+            document["file_path"] = resolved_path
+            documents[document_id] = document
+            save_documents(documents)
+    return document
 
 def get_all_documents() -> Dict:
     """Get all stored documents"""

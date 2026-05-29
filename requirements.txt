@@ -1,6 +1,7 @@
 
 fastapi
 uvicorn
+jinja2
 pandas
 numpy
 pymupdf
@@ -8,4 +9,3 @@ python-docx
 whoosh
 scikit-learn
 nltk
-uuid
