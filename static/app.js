@@ -36,6 +36,20 @@ tabBtns.forEach(btn => {
 
 uploadArea.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
+uploadArea.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    uploadArea.classList.add('drag-over');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('drag-over');
+});
+
+uploadArea.addEventListener('drop', (event) => {
+    event.preventDefault();
+    uploadArea.classList.remove('drag-over');
+    handleFileSelect(event.dataTransfer.files);
+});
 clearBtn.addEventListener('click', clearSelection);
 searchBtn.addEventListener('click', performSearch);
 searchInput.addEventListener('input', (e) => updateSuggestions(e.target.value));
@@ -52,11 +66,15 @@ document.addEventListener('click', (event) => {
 });
 
 function showElement(el) {
-    if (el) el.classList.add('active');
+    if (!el) return;
+    el.classList.add('active');
+    if (el.hasAttribute && el.hasAttribute('hidden')) el.removeAttribute('hidden');
 }
 
 function hideElement(el) {
-    if (el) el.classList.remove('active');
+    if (!el) return;
+    el.classList.remove('active');
+    if (el.setAttribute) el.setAttribute('hidden', 'true');
 }
 
 function setLoading(el, enabled) {
@@ -186,7 +204,8 @@ function updateSuggestions(query) {
     }
 
     const matches = keywordSuggestions
-        .filter(keyword => keyword.includes(normalized))
+        .map(keyword => String(keyword))
+        .filter(keyword => keyword.toLowerCase().includes(normalized))
         .slice(0, 8);
 
     if (matches.length === 0) {

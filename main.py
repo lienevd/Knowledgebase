@@ -1,6 +1,6 @@
+import uvicorn
 
-from src.processing.extractor import extract_text
-from src.classification.classifier import classify_document
+from app import app
 
 if __name__ == "__main__":
-    print("IBC Document Intelligence Platform")
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)

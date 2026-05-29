@@ -9,3 +9,4 @@ python-docx
 whoosh
 scikit-learn
 nltk
+python-multipart

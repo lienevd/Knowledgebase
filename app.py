@@ -6,30 +6,72 @@ from fastapi.templating import Jinja2Templates
 import html
 import uuid
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
-from src.storage.document_store import (
-    store_document,
-    search_keyword,
-    save_uploaded_file,
-    get_document,
-)
-
+from src.classification.classifier import classify_document
+from src.indexing.indexer import get_or_create_index, index_document, search_index
 from src.keywords.keyword_loader import load_keywords
+from src.processing.extractor import extract_text
+from src.storage.document_store import (
+    get_all_documents,
+    get_document,
+    save_uploaded_file,
+    search_keyword,
+    store_document,
+)
 
 KEYWORDS = load_keywords()
 
-KEYWORD_EXAMPLES = (
-    KEYWORDS[:8]
-    if KEYWORDS
-    else ["security", "risk", "authentication", "encryption", "cloud"]
-)
+KEYWORD_EXAMPLES = KEYWORDS[:8] if KEYWORDS else [
+    "security",
+    "risk",
+    "authentication",
+    "encryption",
+    "cloud",
+]
+
+DEFAULT_CATEGORY_RULES = {
+    "Security": ["security", "threat", "breach", "vulnerability", "malware", "attack"],
+    "Risk": ["risk", "exposure", "compliance", "governance", "audit"],
+    "Authentication": ["authentication", "auth", "login", "password", "credential"],
+    "Encryption": ["encryption", "crypto", "ssl", "tls", "cipher"],
+    "Cloud": ["cloud", "azure", "aws", "gcp"],
+    "Privacy": ["privacy", "personal", "data protection", "gdpr"],
+}
+
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_DIR = BASE_DIR / "data" / "indexdir"
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-# Static + templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+
+def build_keyword_map(keywords: List[str]) -> Dict[str, List[str]]:
+    categories: Dict[str, List[str]] = {key: [] for key in DEFAULT_CATEGORY_RULES}
+    categories["General"] = []
+
+    for keyword_value in keywords:
+        normalized = keyword_value.lower()
+        matched = False
+
+        for category, tokens in DEFAULT_CATEGORY_RULES.items():
+            if any(token in normalized for token in tokens):
+                categories[category].append(keyword_value)
+                matched = True
+
+        if not matched:
+            categories["General"].append(keyword_value)
+
+    return {category: values for category, values in categories.items() if values}
+
+
+KEYWORD_MAP = build_keyword_map(KEYWORDS) if KEYWORDS else {"Security & Risk": KEYWORD_EXAMPLES}
+
+
+@app.on_event("startup")
+async def startup_event():
+    get_or_create_index(INDEX_DIR)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -51,53 +93,42 @@ async def home(request: Request):
 
 @app.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
-
     uploaded_files = []
     skipped_files = []
 
     for file in files:
         try:
             content_bytes = await file.read()
-
             document_id = str(uuid.uuid4())
+            file_path = save_uploaded_file(document_id, file.filename, content_bytes)
+            extracted_text = extract_text(file_path).strip()
 
-            text = content_bytes.decode(errors="ignore")
+            if not extracted_text:
+                extracted_text = content_bytes.decode(errors="ignore").strip()
 
-            keywords = (
-                KEYWORDS
-                if KEYWORDS
-                else [
-                    "security",
-                    "risk",
-                    "authentication",
-                    "encryption",
-                    "cloud",
-                ]
-            )
+            if not extracted_text:
+                raise ValueError("No text could be extracted from this file.")
 
-            scores = {}
+            keyword_scores = {
+                keyword: extracted_text.lower().count(keyword.lower())
+                for keyword in (KEYWORDS or KEYWORD_EXAMPLES)
+            }
 
-            for keyword in keywords:
-                scores[keyword] = text.lower().count(keyword)
-
-            file_path = save_uploaded_file(
-                document_id,
-                file.filename,
-                content_bytes,
-            )
+            classification = classify_document(extracted_text, KEYWORD_MAP)
+            category = classification.get("category", "Uncategorized")
 
             store_document(
                 document_id,
                 file.filename,
-                text,
-                scores,
+                extracted_text,
+                keyword_scores,
+                category=category,
                 file_path=file_path,
             )
-
+            index_document(document_id, file.filename, extracted_text, category, INDEX_DIR)
             uploaded_files.append(file.filename)
-
-        except Exception:
-            skipped_files.append(f"{file.filename} (error)")
+        except Exception as exc:
+            skipped_files.append(f"{file.filename} ({exc})")
 
     return {
         "uploaded_count": len(uploaded_files),
@@ -128,13 +159,19 @@ async def download(document_id: str):
 
 @app.get("/search")
 async def search(keyword: str):
+    if not keyword or not keyword.strip():
+        raise HTTPException(status_code=400, detail="Keyword cannot be empty")
 
-    if not keyword or len(keyword.strip()) == 0:
-        return {"error": "Keyword cannot be empty"}
+    results = search_index(keyword, INDEX_DIR)
+    if not results:
+        return search_keyword(keyword)
 
-    results = search_keyword(keyword)
-
-    return results
+    return {
+        "keyword": keyword,
+        "total_matches": len(results),
+        "top_document": results[0] if results else None,
+        "all_results": results,
+    }
 
 
 @app.get("/preview")

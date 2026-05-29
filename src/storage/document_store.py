@@ -52,7 +52,14 @@ def resolve_file_path(document_id: str, filename: str, file_path: Optional[str] 
     return None
 
 
-def store_document(document_id: str, filename: str, content: str, keyword_scores: Dict[str, int], file_path: Optional[str] = None):
+def store_document(
+    document_id: str,
+    filename: str,
+    content: str,
+    keyword_scores: Dict[str, int],
+    category: str = "Uncategorized",
+    file_path: Optional[str] = None,
+):
     """Store a new document"""
     documents = load_documents()
     resolved_path = resolve_file_path(document_id, filename, file_path)
@@ -60,7 +67,8 @@ def store_document(document_id: str, filename: str, content: str, keyword_scores
         "filename": filename,
         "content": content,
         "keyword_scores": keyword_scores,
-        "file_path": resolved_path
+        "category": category,
+        "file_path": resolved_path,
     }
     save_documents(documents)
 
@@ -100,6 +108,7 @@ def search_keyword(keyword: str) -> Dict:
                 "document_id": doc_id,
                 "filename": doc_data.get("filename", "Unknown"),
                 "keyword_count": count,
+                "category": doc_data.get("category", "Uncategorized"),
                 "context": extract_context(doc_data.get("content", ""), keyword_lower)
             })
     

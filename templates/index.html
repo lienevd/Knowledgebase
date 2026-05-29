@@ -6,7 +6,7 @@
 
     <title>IBC Document Intelligence</title>
 
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=2">
 </head>
 
 <body>
@@ -68,7 +68,7 @@
                 <input
                     type="file"
                     id="file-input"
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".pdf,.doc,.docx,.txt,.html,.htm"
                     multiple
                 >
             </div>
@@ -85,7 +85,7 @@
                 </button>
             </div>
 
-            <div class="loading" id="loading">
+            <div class="loading" id="loading" hidden>
                 <div class="spinner"></div>
                 <p id="loading-text">Uploading documents...</p>
             </div>
@@ -134,7 +134,7 @@
                 </div>
             </div>
 
-            <div class="loading" id="search-loading">
+            <div class="loading" id="search-loading" hidden>
                 <div class="spinner"></div>
                 <p>Searching documents...</p>
             </div>
@@ -148,10 +148,10 @@
 </div>
 
 <script>
-    const keywordSuggestions = {{ keywords | tojson }} || [];
+    window.KEYWORD_SUGGESTIONS = {{ keywords | tojson }} || [];
 </script>
 
-<script src="/static/app.js"></script>
+<script src="{{ url_for('static', path='/app.js') }}?v=2"></script>
 
 </body>
 </html>
