@@ -1,5 +1,5 @@
 // Tabs
-const tabBtns = document.querySelectorAll('.tab-btn');
+const navBtns = document.querySelectorAll('.nav-btn');
 const tabContents = document.querySelectorAll('.tab-content');
 
 const uploadArea = document.getElementById('upload-area');
@@ -17,51 +17,74 @@ const searchInput = document.getElementById('search-input');
 const suggestionsBox = document.getElementById('search-suggestions');
 const searchLoading = document.getElementById('search-loading');
 const searchError = document.getElementById('search-error');
+const searchMessage = document.getElementById('search-message');
 const searchResultsContainer = document.getElementById('search-results-container');
+
+const docCountEl = document.getElementById('doc-count');
+const keywordCountEl = document.getElementById('keyword-count');
 
 const keywordSuggestions = window.KEYWORD_SUGGESTIONS || [];
 
 let selectedFiles = [];
+function safeSetHTML(el, html) {
+    if (!el) return;
+    el.innerHTML = html;
+}
+
+function safeSetText(el, text) {
+    if (!el) return;
+    el.textContent = text;
+}
 
 function activateTab(tabName) {
-    tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
+    navBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
     tabContents.forEach(content => content.classList.toggle('active', content.id === tabName));
 }
 
-tabBtns.forEach(btn => {
+navBtns.forEach(btn => {
+    if (!btn) return;
     btn.addEventListener('click', () => {
         activateTab(btn.dataset.tab);
     });
 });
-
-uploadArea.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
-uploadArea.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    uploadArea.classList.add('drag-over');
-});
-
-uploadArea.addEventListener('dragleave', () => {
-    uploadArea.classList.remove('drag-over');
-});
-
-uploadArea.addEventListener('drop', (event) => {
-    event.preventDefault();
-    uploadArea.classList.remove('drag-over');
-    handleFileSelect(event.dataTransfer.files);
-});
-clearBtn.addEventListener('click', clearSelection);
-searchBtn.addEventListener('click', performSearch);
-searchInput.addEventListener('input', (e) => updateSuggestions(e.target.value));
-searchInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
+if (uploadArea) {
+    uploadArea.addEventListener('click', () => fileInput?.click());
+    uploadArea.addEventListener('dragover', (event) => {
         event.preventDefault();
-        performSearch();
-    }
-});
+        uploadArea.classList.add('drag-over');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('drag-over');
+    });
+
+    uploadArea.addEventListener('drop', (event) => {
+        event.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        handleFileSelect(event.dataTransfer.files);
+    });
+}
+if (fileInput) {
+    fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
+}
+if (clearBtn) {
+    clearBtn.addEventListener('click', clearSelection);
+}
+if (searchBtn) {
+    searchBtn.addEventListener('click', performSearch);
+}
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => updateSuggestions(e.target.value));
+    searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            performSearch();
+        }
+    });
+}
 document.addEventListener('click', (event) => {
     if (!event.target.closest('.search-dropdown')) {
-        suggestionsBox.classList.remove('active');
+        if (suggestionsBox) suggestionsBox.classList.remove('active');
     }
 });
 
@@ -98,8 +121,7 @@ function handleFileSelect(files) {
             <span>${(file.size / 1024).toFixed(1)} KB</span>
         </li>
     `).join('');
-
-    selectedFilesDiv.innerHTML = `
+        safeSetHTML(selectedFilesDiv, `
         <div class="selected-files-box">
             <div class="selected-files-header">Selected Files (${selectedFiles.length})</div>
             <ul>${listItems}</ul>
@@ -108,18 +130,18 @@ function handleFileSelect(files) {
 
     uploadBtn.disabled = false;
     clearBtn.disabled = false;
-    uploadError.textContent = '';
+    safeSetText(uploadError, '');
     hideElement(uploadError);
     hideElement(uploadResults);
 }
 
 function clearSelection() {
-    fileInput.value = '';
+    if (fileInput) fileInput.value = '';
     selectedFiles = [];
-    selectedFilesDiv.innerHTML = '';
+        safeSetHTML(selectedFilesDiv, '');
     uploadBtn.disabled = true;
     clearBtn.disabled = true;
-    uploadError.textContent = '';
+    safeSetText(uploadError, '');
     hideElement(uploadError);
     hideElement(loadingPanel);
     hideElement(uploadResults);
@@ -128,8 +150,14 @@ function clearSelection() {
 function renderUploadResults(data) {
     const uploadedCount = data.uploaded_count || 0;
     const skippedCount = data.skipped_files ? data.skipped_files.length : 0;
+    
+    // Update document count in sidebar
+    if (docCountEl) {
+        const currentCount = parseInt(docCountEl.textContent) || 0;
+        docCountEl.textContent = currentCount + uploadedCount;
+    }
 
-    uploadSummary.innerHTML = `
+        safeSetHTML(uploadSummary, `
         <div class="result-card">
             <h4>${uploadedCount > 0 ? 'Upload Complete' : 'Upload status'}</h4>
             <p>${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded successfully.</p>
@@ -154,15 +182,16 @@ function renderUploadResults(data) {
     `;
 
     showElement(uploadResults);
+    hideElement(document.getElementById('empty-state'));
 }
 
 async function uploadDocuments() {
     if (selectedFiles.length === 0) {
-        uploadError.textContent = 'Please select at least one file to upload.';
+        safeSetText(uploadError, 'Please select at least one file to upload.');
         return;
     }
 
-    uploadError.textContent = '';
+    safeSetText(uploadError, '');
     const formData = new FormData();
     selectedFiles.forEach(file => formData.append('files', file));
 
@@ -183,7 +212,7 @@ async function uploadDocuments() {
 
         renderUploadResults(data);
     } catch (error) {
-        uploadError.textContent = error.message || 'Upload failed. Please try again.';
+        safeSetText(uploadError, error.message || 'Upload failed. Please try again.');
         showElement(uploadError);
     } finally {
         setLoading(loadingPanel, false);
@@ -192,13 +221,15 @@ async function uploadDocuments() {
     }
 }
 
-uploadBtn.addEventListener('click', uploadDocuments);
+if (uploadBtn) {
+    uploadBtn.addEventListener('click', uploadDocuments);
+}
 
 function updateSuggestions(query) {
     const normalized = query.trim().toLowerCase();
 
     if (!normalized) {
-        suggestionsBox.innerHTML = '';
+            safeSetHTML(suggestionsBox, '');
         suggestionsBox.classList.remove('active');
         return;
     }
@@ -209,12 +240,12 @@ function updateSuggestions(query) {
         .slice(0, 8);
 
     if (matches.length === 0) {
-        suggestionsBox.innerHTML = '';
+            safeSetHTML(suggestionsBox, '');
         suggestionsBox.classList.remove('active');
         return;
     }
 
-    suggestionsBox.innerHTML = `
+        safeSetHTML(suggestionsBox, `
         <ul>
             ${matches.map(keyword => `<li class="suggestion-item">${keyword}</li>`).join('')}
         </ul>
@@ -234,50 +265,76 @@ function renderSearchResults(data) {
     const keyword = data.keyword || searchInput.value.trim();
     const results = data.all_results || [];
 
+    if (!searchResultsContainer) return;
+
     if (!results.length) {
-        searchResultsContainer.innerHTML = `
+        safeSetHTML(searchResultsContainer, `
             <div class="result-card">
                 <h4>No matches found</h4>
                 <p>There are no documents containing <strong>${keyword}</strong>. Try a broader keyword.</p>
             </div>
-        `;
+        `);
         showElement(searchResultsContainer);
         return;
     }
 
     const resultItems = results.map(item => `
         <div class="result-item-card">
-            <h5>${item.filename}</h5>
-            <p>Keyword frequency: <strong>${item.keyword_count}</strong></p>
+            <div class="result-item-header">
+                <h5>${item.filename}</h5>
+                <div class="action-buttons">
+                    <button type="button" class="btn-secondary preview-btn" data-id="${item.document_id}">Preview</button>
+                    <button type="button" class="btn-primary request-btn" data-id="${item.document_id}" data-name="${encodeURIComponent(item.filename)}">Request Document</button>
+                </div>
+            </div>
+            <p><strong>${item.keyword_count}</strong> matches</p>
             <p>${item.context || 'No snippet available.'}</p>
-            <span class="tag">Document ID: ${item.document_id}</span>
+            <p class="meta">Category: ${item.category || 'Uncategorized'}</p>
         </div>
     `).join('');
 
-    searchResultsContainer.innerHTML = `
+    safeSetHTML(searchResultsContainer, `
         <div class="result-card">
             <h4>${results.length} document${results.length === 1 ? '' : 's'} matched</h4>
             <p>Showing top ${Math.min(results.length, 5)} results for <strong>${keyword}</strong>.</p>
         </div>
         <div class="result-list">${resultItems}</div>
     `;
+
+    searchResultsContainer.querySelectorAll('.preview-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const documentId = button.dataset.id;
+            window.open(`/preview?document_id=${encodeURIComponent(documentId)}`, '_blank');
+        });
+    });
+
+    searchResultsContainer.querySelectorAll('.request-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            const documentId = button.dataset.id;
+            const keyword = searchInput.value.trim();
+            await sendDownloadRequest(documentId, keyword);
+        });
+    });
+
     showElement(searchResultsContainer);
 }
 
 async function performSearch() {
     const keyword = searchInput.value.trim();
 
-    searchError.textContent = '';
+    safeSetText(searchError, '');
     hideElement(searchError);
     hideElement(searchResultsContainer);
 
     if (!keyword) {
-        searchError.textContent = 'Please type a keyword or select one of the suggested terms.';
+        safeSetText(searchError, 'Please type a keyword or select one of the suggested terms.');
         showElement(searchError);
         return;
     }
 
     setLoading(searchLoading, true);
+    safeSetText(searchMessage, '');
+    hideElement(searchMessage);
 
     try {
         const response = await fetch(`/search?keyword=${encodeURIComponent(keyword)}`);
@@ -289,10 +346,35 @@ async function performSearch() {
 
         renderSearchResults(data);
     } catch (error) {
-        searchError.textContent = error.message || 'Unable to perform search. Please try again.';
+        safeSetText(searchError, error.message || 'Unable to perform search. Please try again.');
         showElement(searchError);
     } finally {
         setLoading(searchLoading, false);
+    }
+}
+
+async function sendDownloadRequest(documentId, keyword) {
+    safeSetText(searchError, '');
+    hideElement(searchError);
+    try {
+        const response = await fetch('/request-download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ document_id: documentId, keyword }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.detail || data.error) {
+            throw new Error(data.detail || data.error || 'Unable to request document.');
+        }
+
+        safeSetText(searchMessage, data.message || 'Your request has been submitted.');
+        showElement(searchMessage);
+    } catch (error) {
+        safeSetText(searchError, error.message || 'Unable to request document. Please try again.');
+        showElement(searchError);
     }
 }
 
@@ -300,6 +382,7 @@ async function performSearch() {
 clearSelection();
 hideElement(searchLoading);
 hideElement(searchError);
+hideElement(searchMessage);
 hideElement(uploadError);
 hideElement(searchResultsContainer);
 hideElement(uploadResults);

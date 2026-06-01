@@ -4,9 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import html
+import json
 import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from src.classification.classifier import classify_document
 from src.indexing.indexer import get_or_create_index, index_document, search_index
@@ -41,6 +43,7 @@ DEFAULT_CATEGORY_RULES = {
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_DIR = BASE_DIR / "data" / "indexdir"
+REQUESTS_FILE = BASE_DIR / "data" / "download_requests.json"
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -155,6 +158,47 @@ async def download(document_id: str):
         filename=document.get("filename", "document"),
         media_type="application/octet-stream",
     )
+
+
+def save_download_request(document_id: str, keyword: Optional[str] = None, filename: Optional[str] = None):
+    REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if REQUESTS_FILE.exists():
+        with REQUESTS_FILE.open("r", encoding="utf-8") as request_file:
+            requests = json.load(request_file)
+    else:
+        requests = []
+
+    requests.append({
+        "document_id": document_id,
+        "filename": filename or "Unknown",
+        "keyword": keyword or "",
+        "requested_at": datetime.utcnow().isoformat() + "Z",
+        "status": "pending",
+    })
+
+    with REQUESTS_FILE.open("w", encoding="utf-8") as request_file:
+        json.dump(requests, request_file, indent=2, ensure_ascii=False)
+
+
+@app.post("/request-download")
+async def request_download(request: Request):
+    payload = await request.json()
+    document_id = payload.get("document_id")
+    keyword = payload.get("keyword")
+
+    if not document_id:
+        raise HTTPException(status_code=400, detail="Document ID is required")
+
+    document = get_document(document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    save_download_request(document_id, keyword, document.get("filename"))
+    return {
+        "status": "requested",
+        "message": "Your download request has been sent to the manager.",
+        "document_name": document.get("filename"),
+    }
 
 
 @app.get("/search")
