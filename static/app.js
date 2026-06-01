@@ -1,7 +1,35 @@
 // Tabs
-const navBtns = document.querySelectorAll('.nav-btn');
-const tabContents = document.querySelectorAll('.tab-content');
+function activateTab(tabName) {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    navBtns.forEach(btn => {
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    tabContents.forEach(content => {
+        if (content.id === tabName) {
+            content.classList.add('active');
+        } else {
+            content.classList.remove('active');
+        }
+    });
+}
 
+// Use event delegation for nav buttons
+document.addEventListener('click', (e) => {
+    const navBtn = e.target.closest('.nav-btn');
+    if (navBtn && navBtn.dataset.tab) {
+        e.preventDefault();
+        activateTab(navBtn.dataset.tab);
+    }
+});
+
+// Get DOM elements
 const uploadArea = document.getElementById('upload-area');
 const fileInput = document.getElementById('file-input');
 const selectedFilesDiv = document.getElementById('selected-files');
@@ -36,17 +64,7 @@ function safeSetText(el, text) {
     el.textContent = text;
 }
 
-function activateTab(tabName) {
-    navBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
-    tabContents.forEach(content => content.classList.toggle('active', content.id === tabName));
-}
-
-navBtns.forEach(btn => {
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-        activateTab(btn.dataset.tab);
-    });
-});
+// Upload area event listeners
 if (uploadArea) {
     uploadArea.addEventListener('click', () => fileInput?.click());
     uploadArea.addEventListener('dragover', (event) => {
@@ -121,12 +139,12 @@ function handleFileSelect(files) {
             <span>${(file.size / 1024).toFixed(1)} KB</span>
         </li>
     `).join('');
-        safeSetHTML(selectedFilesDiv, `
+    safeSetHTML(selectedFilesDiv, `
         <div class="selected-files-box">
             <div class="selected-files-header">Selected Files (${selectedFiles.length})</div>
             <ul>${listItems}</ul>
         </div>
-    `;
+    `);
 
     uploadBtn.disabled = false;
     clearBtn.disabled = false;
@@ -157,7 +175,7 @@ function renderUploadResults(data) {
         docCountEl.textContent = currentCount + uploadedCount;
     }
 
-        safeSetHTML(uploadSummary, `
+    safeSetHTML(uploadSummary, `
         <div class="result-card">
             <h4>${uploadedCount > 0 ? 'Upload Complete' : 'Upload status'}</h4>
             <p>${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded successfully.</p>
@@ -179,7 +197,7 @@ function renderUploadResults(data) {
                 </div>
             ` : ''}
         </div>
-    `;
+    `);
 
     showElement(uploadResults);
     hideElement(document.getElementById('empty-state'));
@@ -240,21 +258,23 @@ function updateSuggestions(query) {
         .slice(0, 8);
 
     if (matches.length === 0) {
-            safeSetHTML(suggestionsBox, '');
+        safeSetHTML(suggestionsBox, '');
         suggestionsBox.classList.remove('active');
         return;
     }
 
-        safeSetHTML(suggestionsBox, `
+    safeSetHTML(suggestionsBox, `
         <ul>
             ${matches.map(keyword => `<li class="suggestion-item">${keyword}</li>`).join('')}
         </ul>
-    `;
+    `);
     suggestionsBox.classList.add('active');
 
     suggestionsBox.querySelectorAll('.suggestion-item').forEach(item => {
         item.addEventListener('click', () => {
-            searchInput.value = item.textContent;
+            // Extract the keyword text (remove the emoji prefix)
+            const text = item.textContent.trim();
+            searchInput.value = text.startsWith('🏷') ? text.substring(1).trim() : text;
             suggestionsBox.classList.remove('active');
             performSearch();
         });
@@ -269,52 +289,88 @@ function renderSearchResults(data) {
 
     if (!results.length) {
         safeSetHTML(searchResultsContainer, `
-            <div class="result-card">
-                <h4>No matches found</h4>
-                <p>There are no documents containing <strong>${keyword}</strong>. Try a broader keyword.</p>
+            <div class="search-no-results">
+                <p>No documents found containing <strong>${keyword}</strong></p>
+                <p class="hint">Try searching for a different keyword</p>
             </div>
         `);
         showElement(searchResultsContainer);
         return;
     }
 
-    const resultItems = results.map(item => `
-        <div class="result-item-card">
-            <div class="result-item-header">
-                <h5>${item.filename}</h5>
-                <div class="action-buttons">
-                    <button type="button" class="btn-secondary preview-btn" data-id="${item.document_id}">Preview</button>
-                    <button type="button" class="btn-primary request-btn" data-id="${item.document_id}" data-name="${encodeURIComponent(item.filename)}">Request Document</button>
-                </div>
-            </div>
-            <p><strong>${item.keyword_count}</strong> matches</p>
-            <p>${item.context || 'No snippet available.'}</p>
-            <p class="meta">Category: ${item.category || 'Uncategorized'}</p>
-        </div>
-    `).join('');
+    // Sort results by keyword count (highest first)
+    const sortedResults = [...results].sort((a, b) => (b.keyword_count || 0) - (a.keyword_count || 0));
+    const topResult = sortedResults[0];
+    const remainingResults = sortedResults.slice(1);
 
-    safeSetHTML(searchResultsContainer, `
-        <div class="result-card">
-            <h4>${results.length} document${results.length === 1 ? '' : 's'} matched</h4>
-            <p>Showing top ${Math.min(results.length, 5)} results for <strong>${keyword}</strong>.</p>
-        </div>
-        <div class="result-list">${resultItems}</div>
+    let html = `
+        <div class="search-results-wrapper">
+            <div class="search-result-summary">
+                <p><strong>${results.length}</strong> document${results.length === 1 ? '' : 's'} found for "<strong>${keyword}</strong>"</p>
+            </div>
     `;
 
-    searchResultsContainer.querySelectorAll('.preview-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const documentId = button.dataset.id;
-            window.open(`/preview?document_id=${encodeURIComponent(documentId)}`, '_blank');
-        });
-    });
+    // Top Result - Stand Out
+    if (topResult) {
+        html += `
+            <div class="top-result-card">
+                <div class="top-result-badge">Top Match</div>
+                <div class="top-result-content">
+                    <h3 class="top-result-title">${topResult.filename}</h3>
+                    <p class="top-result-matches"><strong>${topResult.keyword_count}</strong> ${topResult.keyword_count === 1 ? 'match' : 'matches'}</p>
+                    <p class="top-result-snippet">${topResult.context || 'No preview available'}</p>
+                    <div class="top-result-category">Category: <strong>${topResult.category || 'Uncategorized'}</strong></div>
+                </div>
+            </div>
+        `;
+    }
 
-    searchResultsContainer.querySelectorAll('.request-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const documentId = button.dataset.id;
-            const keyword = searchInput.value.trim();
-            await sendDownloadRequest(documentId, keyword);
+    // Remaining Results - Collapsible
+    if (remainingResults.length > 0) {
+        html += `
+            <div class="other-results-section">
+                <button class="collapsible-header" id="other-results-toggle">
+                    <span class="toggle-icon">▼</span>
+                    <span class="results-count">${remainingResults.length} other result${remainingResults.length === 1 ? '' : 's'}</span>
+                </button>
+                <div class="collapsible-content" id="other-results-list" style="display: none;">
+                    <div class="other-results-list">
+                        ${remainingResults.map((item, index) => `
+                            <div class="other-result-item" data-index="${index}">
+                                <div class="result-item-header">
+                                    <h4 class="result-item-title">${item.filename}</h4>
+                                    <span class="result-item-matches">${item.keyword_count} ${item.keyword_count === 1 ? 'match' : 'matches'}</span>
+                                </div>
+                                <p class="result-item-snippet">${item.context || 'No preview available'}</p>
+                                <div class="result-item-meta">
+                                    <span>Category: ${item.category || 'Uncategorized'}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+    safeSetHTML(searchResultsContainer, html);
+
+    // Add collapsible toggle functionality
+    const toggleBtn = document.getElementById('other-results-toggle');
+    const collapsibleContent = document.getElementById('other-results-list');
+    
+    if (toggleBtn && collapsibleContent) {
+        toggleBtn.addEventListener('click', () => {
+            const isOpen = collapsibleContent.style.display !== 'none';
+            collapsibleContent.style.display = isOpen ? 'none' : 'block';
+            
+            const icon = toggleBtn.querySelector('.toggle-icon');
+            if (icon) {
+                icon.textContent = isOpen ? '▶' : '▼';
+            }
         });
-    });
+    }
 
     showElement(searchResultsContainer);
 }
@@ -322,6 +378,9 @@ function renderSearchResults(data) {
 async function performSearch() {
     const keyword = searchInput.value.trim();
 
+    // Hide suggestions dropdown
+    if (suggestionsBox) suggestionsBox.classList.remove('active');
+    
     safeSetText(searchError, '');
     hideElement(searchError);
     hideElement(searchResultsContainer);
