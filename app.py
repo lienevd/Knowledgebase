@@ -273,7 +273,14 @@ async def preview(document_id: str):
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    summary = summarize_text(document.get("content", ""))
+    text = document.get("content", "")
+
+    if not text:
+        file_path = document.get("file_path")
+        if file_path and Path(file_path).exists():
+            text = extract_text(file_path).strip()
+
+    summary = summarize_text(text)
 
     return {
         "document_id": document_id,
@@ -281,7 +288,6 @@ async def preview(document_id: str):
         "category": document.get("category", "Uncategorized"),
         "summary": summary,
     }
-
 
 @app.get("/documents-count")
 async def get_documents_count():

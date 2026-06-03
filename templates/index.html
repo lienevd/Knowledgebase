@@ -4,84 +4,103 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IBC Document Intelligence</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5" />
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand-section">
-        <div class="logo-placeholder">Company Logo</div>
-        <h1 class="brand-title">IBC DOCUMENT ANALYSIS</h1>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">IBC</div>
+          <div>
+            <p class="brand-kicker">Document Intelligence</p>
+            <h1 class="brand-title">IBC Analysis</h1>
+          </div>
+        </div>
       </div>
 
-      <nav class="navigation-section">
-        <p class="section-label">NAVIGATION</p>
+      <nav class="navigation-section" aria-label="Primary navigation">
+        <p class="section-label">Navigation</p>
         <button class="nav-btn active" data-tab="upload-tab">
-          <span class="nav-icon">⬆</span>
+          <span class="nav-icon" aria-hidden="true">U</span>
           <span class="nav-text">Upload Documents</span>
         </button>
         <button class="nav-btn" data-tab="search-tab">
-          <span class="nav-icon">🔍</span>
+          <span class="nav-icon" aria-hidden="true">S</span>
           <span class="nav-text">Search Keywords</span>
         </button>
       </nav>
 
       <div class="library-section">
-        <p class="section-label">LIBRARY</p>
+        <p class="section-label">Library</p>
         <div class="metric-item">
-          <span class="metric-icon">📄</span>
+          <span class="metric-icon" aria-hidden="true">D</span>
           <div>
             <p class="metric-label">Documents</p>
             <p class="metric-value" id="doc-count">0</p>
           </div>
         </div>
         <div class="metric-item">
-          <span class="metric-icon">🏷</span>
+          <span class="metric-icon" aria-hidden="true">K</span>
           <div>
             <p class="metric-label">Keywords</p>
             <p class="metric-value" id="keyword-count">{{ keywords|length }}</p>
           </div>
         </div>
       </div>
+
       <div class="sidebar-section">
-      <h3>BASKET</h3>
+        <h3>Basket</h3>
 
-      <div class="stat-card">
-        <span>Selected</span>
-        <strong id="basket-count">0</strong>
+        <div class="stat-card">
+          <span>Selected documents</span>
+          <strong id="basket-count">0</strong>
+        </div>
+
+        <div id="basket-list" class="basket-list">
+          <p class="basket-empty">No documents selected yet.</p>
+        </div>
+
+        <button id="request-basket-btn" type="button" disabled>
+          Request Basket
+        </button>
+
+        <button id="clear-basket-btn" type="button" disabled>
+          Clear Basket
+        </button>
       </div>
-
-      <div id="basket-list" class="basket-list">
-        <p class="basket-empty">No documents selected yet.</p>
-      </div>
-
-      <button id="request-basket-btn" type="button" disabled>
-        Request Basket
-      </button>
-
-      <button id="clear-basket-btn" type="button" disabled>
-        Clear Basket
-      </button>
-    </div>
     </aside>
 
     <main class="main-panel">
+      <div class="main-banner">
+        <div class="banner-copy">
+          <p class="eyebrow">Compliance workspace</p>
+          <h2>Review documents, find keyword evidence, and request files from one focused workspace.</h2>
+        </div>
+        <div class="banner-pill-group" aria-label="Workflow stages">
+          <span class="pill">Upload</span>
+          <span class="pill">Search</span>
+          <span class="pill">Request</span>
+        </div>
+      </div>
+
       <div id="upload-tab" class="tab-content active">
         <header class="page-header">
           <h1>Upload Documents</h1>
-          <p class="page-subtitle">Add documents to your library for keyword analysis</p>
+          <p class="page-subtitle">Add source files to the library for classification and keyword analysis.</p>
         </header>
 
         <div class="upload-container">
           <div class="upload-area" id="upload-area">
-            <div class="upload-icon">⬆</div>
-            <h2 class="upload-title">Drop documents here</h2>
-            <p class="upload-subtitle">or click to browse your files</p>
-            <div class="file-types">
+            <div class="upload-icon" aria-hidden="true">+</div>
+            <h2 class="upload-title">Select documents</h2>
+            <p class="upload-subtitle">PDF, Word, text, Markdown, and HTML files are supported.</p>
+            <div class="file-types" aria-label="Supported file types">
               <span>.pdf</span>
               <span>.docx</span>
               <span>.txt</span>
               <span>.md</span>
+              <span>.html</span>
             </div>
             <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt,.md,.html,.htm" multiple />
           </div>
@@ -102,7 +121,7 @@
           <div class="results" id="results"><div id="upload-summary"></div></div>
 
           <div class="empty-state" id="empty-state">
-            <p>No documents uploaded yet</p>
+            <p>Your uploaded documents will appear here after processing.</p>
           </div>
         </div>
       </div>
@@ -110,7 +129,7 @@
       <div id="search-tab" class="tab-content">
         <header class="page-header">
           <h1>Search Keywords</h1>
-          <p class="page-subtitle">Find documents by keyword</p>
+          <p class="page-subtitle">Search indexed documents and add useful matches to your request basket.</p>
         </header>
 
         <div class="search-container">
@@ -118,12 +137,13 @@
             <label for="search-input" class="search-label">Search Keyword</label>
             <div class="search-input-group">
               <div class="search-dropdown">
-                <input id="search-input" type="text" placeholder="Type or choose a keyword..." autocomplete="off" />
+                <input id="search-input" type="text" placeholder="Enter a keyword" autocomplete="off" />
                 <div id="search-suggestions" class="suggestions"></div>
               </div>
               <button class="btn-primary" id="search-btn">Search</button>
             </div>
-            <div class="search-hint">Examples: {{ keyword_hint | safe }}</div>
+            <div class="search-hint">Common examples: {{ keyword_hint | safe }}</div>
+            <div id="search-message" class="message message-success" hidden></div>
           </div>
 
           <div class="loading" id="search-loading" hidden>
@@ -141,6 +161,6 @@
   <script>
     window.KEYWORD_SUGGESTIONS = {{ keywords | tojson }} || [];
   </script>
-  <script src="{{ url_for('static', path='/app.js') }}?v=4"></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v=5"></script>
 </body>
 </html>
