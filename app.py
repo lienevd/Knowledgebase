@@ -13,14 +13,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from src.classification.classifier import classify_document
-from src.indexing.indexer import get_or_create_index, index_document, search_index
+from src.indexing.indexer import get_or_create_index, index_document
 from src.keywords.keyword_loader import load_keywords
 from src.processing.extractor import extract_text
 from src.storage.document_store import (
     get_all_documents,
     get_document,
     save_uploaded_file,
-    search_keyword,
     store_document,
 )
 
@@ -46,6 +45,9 @@ DEFAULT_CATEGORY_RULES = {
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_DIR = BASE_DIR / "data" / "indexdir"
 REQUESTS_FILE = BASE_DIR / "data" / "download_requests.json"
+SEARCH_TEXT_CACHE_FILE = BASE_DIR / "data" / "search_text_cache.json"
+SEARCH_TEXT_CACHE: Optional[Dict[str, str]] = None
+SEARCH_TEXT_CACHE_CHANGED = False
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -234,21 +236,156 @@ async def request_bulk_download(request: Request):
         "requested_documents": requested_documents,
     }
 
+
+def count_keyword_occurrences(text: str, keyword: str) -> int:
+    clean_keyword = keyword.strip().lower()
+    if not clean_keyword:
+        return 0
+
+    return (text or "").lower().count(clean_keyword)
+
+
+def extract_keyword_context(text: str, keyword: str, context_length: int = 150) -> str:
+    content = text or ""
+    keyword_lower = keyword.strip().lower()
+    match_index = content.lower().find(keyword_lower)
+
+    if match_index == -1:
+        return ""
+
+    start = max(0, match_index - context_length)
+    end = min(len(content), match_index + len(keyword_lower) + context_length)
+    context = normalize_document_text(content[start:end])
+
+    if start > 0:
+        context = "..." + context
+    if end < len(content):
+        context = context + "..."
+
+    return context
+
+
+def is_searchable_stored_text(text: str) -> bool:
+    if not text or not text.strip():
+        return False
+
+    sample = text[:2000]
+    if sample.lstrip().startswith("%PDF-"):
+        return False
+
+    control_chars = sum(
+        1 for char in sample
+        if ord(char) < 32 and char not in "\r\n\t"
+    )
+    return control_chars / max(len(sample), 1) < 0.02
+
+
+def load_search_text_cache() -> Dict[str, str]:
+    global SEARCH_TEXT_CACHE
+
+    if SEARCH_TEXT_CACHE is not None:
+        return SEARCH_TEXT_CACHE
+
+    if SEARCH_TEXT_CACHE_FILE.exists():
+        with SEARCH_TEXT_CACHE_FILE.open("r", encoding="utf-8") as cache_file:
+            SEARCH_TEXT_CACHE = json.load(cache_file)
+    else:
+        SEARCH_TEXT_CACHE = {}
+
+    return SEARCH_TEXT_CACHE
+
+
+def save_search_text_cache() -> None:
+    global SEARCH_TEXT_CACHE_CHANGED
+
+    if not SEARCH_TEXT_CACHE_CHANGED:
+        return
+
+    SEARCH_TEXT_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with SEARCH_TEXT_CACHE_FILE.open("w", encoding="utf-8") as cache_file:
+        json.dump(load_search_text_cache(), cache_file, ensure_ascii=False)
+    SEARCH_TEXT_CACHE_CHANGED = False
+
+
+def document_cache_key(document: Dict) -> Optional[str]:
+    file_path = document.get("file_path")
+    if not file_path:
+        return None
+
+    path = Path(file_path)
+    if not path.exists():
+        return None
+
+    stat = path.stat()
+    return f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}"
+
+
+def get_searchable_document_text(document: Dict) -> str:
+    global SEARCH_TEXT_CACHE_CHANGED
+
+    stored_text = document.get("content") or ""
+    if is_searchable_stored_text(stored_text):
+        return stored_text
+
+    cache_key = document_cache_key(document)
+    cache = load_search_text_cache()
+    if cache_key and cache_key in cache:
+        return cache[cache_key]
+
+    extracted_text = read_document_text(document)
+    if cache_key and is_searchable_stored_text(extracted_text):
+        cache[cache_key] = extracted_text
+        SEARCH_TEXT_CACHE_CHANGED = True
+
+    return extracted_text
+
+
+def sort_results_by_keyword_count(results: List[Dict]) -> List[Dict]:
+    return sorted(
+        results,
+        key=lambda item: (-item["keyword_count"], item["filename"].lower()),
+    )
+
+
+def search_documents_by_keyword(keyword: str, limit: int = 10) -> Dict:
+    results = []
+
+    for document_id, document in get_all_documents().items():
+        text = get_searchable_document_text(document)
+        count = count_keyword_occurrences(text, keyword)
+
+        if count <= 0:
+            continue
+
+        results.append({
+            "document_id": document_id,
+            "filename": document.get("filename", "Unknown"),
+            "keyword_count": count,
+            "category": document.get("category", "Uncategorized"),
+            "context": extract_keyword_context(text, keyword),
+        })
+
+    results = sort_results_by_keyword_count(results)
+    save_search_text_cache()
+
+    limited_results = results[:limit]
+
+    return {
+        "keyword": keyword,
+        "total_matches": len(results),
+        "displayed_matches": len(limited_results),
+        "result_limit": limit,
+        "top_document": limited_results[0] if limited_results else None,
+        "all_results": limited_results,
+    }
+
+
 @app.get("/search")
 async def search(keyword: str):
     if not keyword or not keyword.strip():
         raise HTTPException(status_code=400, detail="Keyword cannot be empty")
 
-    results = search_index(keyword, INDEX_DIR)
-    if not results:
-        return search_keyword(keyword)
-
-    return {
-        "keyword": keyword,
-        "total_matches": len(results),
-        "top_document": results[0] if results else None,
-        "all_results": results,
-    }
+    return search_documents_by_keyword(keyword.strip())
 
 
 def normalize_document_text(text: str) -> str:

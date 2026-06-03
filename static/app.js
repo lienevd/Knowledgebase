@@ -355,6 +355,8 @@ function updateSuggestions(query) {
 function renderSearchResults(data) {
   const keyword = data.keyword || searchInput.value.trim();
   const results = data.all_results || [];
+  const totalMatches = data.total_matches || results.length;
+  const resultLimit = data.result_limit || 10;
 
   if (!searchResultsContainer) return;
 
@@ -375,7 +377,7 @@ function renderSearchResults(data) {
 
   let html = `
     <div class="search-results-header">
-      <h3>${results.length} document${results.length === 1 ? '' : 's'} found for "${escapeHTML(keyword)}"</h3>
+      <h3>Top ${Math.min(resultLimit, totalMatches)} of ${totalMatches} document${totalMatches === 1 ? '' : 's'} found for "${escapeHTML(keyword)}"</h3>
     </div>
   `;
 
@@ -386,7 +388,7 @@ function renderSearchResults(data) {
       <div class="collapsible-results">
         <button type="button" id="other-results-toggle" class="collapsible-toggle">
           <span class="toggle-icon">+</span>
-          ${remainingResults.length} other result${remainingResults.length === 1 ? '' : 's'}
+          ${remainingResults.length} remaining top match${remainingResults.length === 1 ? '' : 'es'} sorted by match count
         </button>
 
         <div id="other-results-list" class="collapsible-content" style="display: none;">
@@ -423,7 +425,7 @@ function renderResultCard(item, isTopResult) {
 
   return `
     <div class="result-card ${isTopResult ? 'top-result' : ''}">
-      ${isTopResult ? '<span class="top-badge">Top Match</span>' : ''}
+      ${isTopResult ? '<span class="top-badge">Top Result</span>' : ''}
 
       <h3>${filename}</h3>
 
