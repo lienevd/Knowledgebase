@@ -1,3 +1,16 @@
+function hideSuggestions() {
+    if (!suggestionsBox) return;
+
+    suggestionsBox.classList.remove('active');
+    suggestionsBox.innerHTML = '';
+}
+
+const basketCountEl = document.getElementById('basket-count');
+const basketListEl = document.getElementById('basket-list');
+const requestBasketBtn = document.getElementById('request-basket-btn');
+const clearBasketBtn = document.getElementById('clear-basket-btn');
+
+let basket = JSON.parse(localStorage.getItem('documentBasket') || '[]');
 // Tabs
 function activateTab(tabName) {
     const navBtns = document.querySelectorAll('.nav-btn');
@@ -62,6 +75,131 @@ function safeSetHTML(el, html) {
 function safeSetText(el, text) {
     if (!el) return;
     el.textContent = text;
+}
+
+async function refreshDocumentCount() {
+  try {
+    const response = await fetch('/documents-count');
+    const data = await response.json();
+
+    if (docCountEl) {
+      docCountEl.textContent = data.total_documents || 0;
+    }
+  } catch (error) {
+    console.error('Could not refresh document count:', error);
+  }
+}
+
+function saveBasket() {
+  localStorage.setItem('documentBasket', JSON.stringify(basket));
+  renderBasket();
+}
+
+function addToBasket(documentId, filename) {
+  if (basket.some(item => item.document_id === documentId)) {
+    safeSetText(searchMessage, 'This document is already in your basket.');
+    showElement(searchMessage);
+    return;
+  }
+
+  basket.push({
+    document_id: documentId,
+    filename,
+  });
+
+  saveBasket();
+
+  safeSetText(searchMessage, `"${filename}" added to your basket.`);
+  showElement(searchMessage);
+}
+
+function removeFromBasket(documentId) {
+  basket = basket.filter(item => item.document_id !== documentId);
+  saveBasket();
+}
+
+function clearBasket() {
+  basket = [];
+  saveBasket();
+}
+
+function renderBasket() {
+  if (basketCountEl) {
+    basketCountEl.textContent = basket.length;
+  }
+
+  if (!basketListEl) return;
+
+  if (!basket.length) {
+    basketListEl.innerHTML = '<p class="basket-empty">No documents selected yet.</p>';
+    if (requestBasketBtn) requestBasketBtn.disabled = true;
+    if (clearBasketBtn) clearBasketBtn.disabled = true;
+    return;
+  }
+
+  basketListEl.innerHTML = basket.map(item => `
+    <div class="basket-item">
+      <span>${item.filename}</span>
+      <button type="button" class="basket-remove-btn" onclick="removeFromBasket('${item.document_id}')">
+        Remove
+      </button>
+    </div>
+  `).join('');
+
+  if (requestBasketBtn) requestBasketBtn.disabled = false;
+  if (clearBasketBtn) clearBasketBtn.disabled = false;
+}
+
+async function requestBasketDocuments() {
+  if (!basket.length) return;
+
+  try {
+    const response = await fetch('/request-bulk-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_ids: basket.map(item => item.document_id),
+        keyword: searchInput?.value || '',
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Unable to request basket documents.');
+    }
+
+    safeSetText(searchMessage, data.message);
+    showElement(searchMessage);
+    clearBasket();
+  } catch (error) {
+    safeSetText(searchError, error.message || 'Unable to request basket documents.');
+    showElement(searchError);
+  }
+}
+
+async function showDocumentSummary(documentId) {
+  try {
+    const response = await fetch(`/preview?document_id=${encodeURIComponent(documentId)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Unable to load summary.');
+    }
+
+    const summaryBox = document.getElementById(`summary-${documentId}`);
+
+    if (summaryBox) {
+      summaryBox.innerHTML = `
+        <strong>Summary</strong>
+        <p>${data.summary}</p>
+      `;
+      summaryBox.classList.toggle('active');
+    }
+  } catch (error) {
+    safeSetText(searchError, error.message || 'Unable to load summary.');
+    showElement(searchError);
+  }
 }
 
 // Upload area event listeners
@@ -169,11 +307,7 @@ function renderUploadResults(data) {
     const uploadedCount = data.uploaded_count || 0;
     const skippedCount = data.skipped_files ? data.skipped_files.length : 0;
     
-    // Update document count in sidebar
-    if (docCountEl) {
-        const currentCount = parseInt(docCountEl.textContent) || 0;
-        docCountEl.textContent = currentCount + uploadedCount;
-    }
+    refreshDocumentCount();
 
     safeSetHTML(uploadSummary, `
         <div class="result-card">
@@ -281,98 +415,111 @@ function updateSuggestions(query) {
     });
 }
 
+function escapeHTML(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function renderSearchResults(data) {
-    const keyword = data.keyword || searchInput.value.trim();
-    const results = data.all_results || [];
+  const keyword = data.keyword || searchInput.value.trim();
+  const results = data.all_results || [];
 
-    if (!searchResultsContainer) return;
+  if (!searchResultsContainer) return;
 
-    if (!results.length) {
-        safeSetHTML(searchResultsContainer, `
-            <div class="search-no-results">
-                <p>No documents found containing <strong>${keyword}</strong></p>
-                <p class="hint">Try searching for a different keyword</p>
-            </div>
-        `);
-        showElement(searchResultsContainer);
-        return;
-    }
-
-    // Sort results by keyword count (highest first)
-    const sortedResults = [...results].sort((a, b) => (b.keyword_count || 0) - (a.keyword_count || 0));
-    const topResult = sortedResults[0];
-    const remainingResults = sortedResults.slice(1);
-
-    let html = `
-        <div class="search-results-wrapper">
-            <div class="search-result-summary">
-                <p><strong>${results.length}</strong> document${results.length === 1 ? '' : 's'} found for "<strong>${keyword}</strong>"</p>
-            </div>
-    `;
-
-    // Top Result - Stand Out
-    if (topResult) {
-        html += `
-            <div class="top-result-card">
-                <div class="top-result-badge">Top Match</div>
-                <div class="top-result-content">
-                    <h3 class="top-result-title">${topResult.filename}</h3>
-                    <p class="top-result-matches"><strong>${topResult.keyword_count}</strong> ${topResult.keyword_count === 1 ? 'match' : 'matches'}</p>
-                    <p class="top-result-snippet">${topResult.context || 'No preview available'}</p>
-                    <div class="top-result-category">Category: <strong>${topResult.category || 'Uncategorized'}</strong></div>
-                </div>
-            </div>
-        `;
-    }
-
-    // Remaining Results - Collapsible
-    if (remainingResults.length > 0) {
-        html += `
-            <div class="other-results-section">
-                <button class="collapsible-header" id="other-results-toggle">
-                    <span class="toggle-icon">▼</span>
-                    <span class="results-count">${remainingResults.length} other result${remainingResults.length === 1 ? '' : 's'}</span>
-                </button>
-                <div class="collapsible-content" id="other-results-list" style="display: none;">
-                    <div class="other-results-list">
-                        ${remainingResults.map((item, index) => `
-                            <div class="other-result-item" data-index="${index}">
-                                <div class="result-item-header">
-                                    <h4 class="result-item-title">${item.filename}</h4>
-                                    <span class="result-item-matches">${item.keyword_count} ${item.keyword_count === 1 ? 'match' : 'matches'}</span>
-                                </div>
-                                <p class="result-item-snippet">${item.context || 'No preview available'}</p>
-                                <div class="result-item-meta">
-                                    <span>Category: ${item.category || 'Uncategorized'}</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    html += `</div>`;
-    safeSetHTML(searchResultsContainer, html);
-
-    // Add collapsible toggle functionality
-    const toggleBtn = document.getElementById('other-results-toggle');
-    const collapsibleContent = document.getElementById('other-results-list');
-    
-    if (toggleBtn && collapsibleContent) {
-        toggleBtn.addEventListener('click', () => {
-            const isOpen = collapsibleContent.style.display !== 'none';
-            collapsibleContent.style.display = isOpen ? 'none' : 'block';
-            
-            const icon = toggleBtn.querySelector('.toggle-icon');
-            if (icon) {
-                icon.textContent = isOpen ? '▶' : '▼';
-            }
-        });
-    }
-
+  if (!results.length) {
+    safeSetHTML(searchResultsContainer, `
+      <div class="empty-search">
+        <p>No documents found containing <strong>${keyword}</strong>.</p>
+        <p>Try searching for a different keyword.</p>
+      </div>
+    `);
     showElement(searchResultsContainer);
+    return;
+  }
+
+  const sortedResults = [...results].sort(
+    (a, b) => (b.keyword_count || 0) - (a.keyword_count || 0)
+  );
+
+  const topResult = sortedResults[0];
+  const remainingResults = sortedResults.slice(1);
+
+  let html = `
+    <div class="search-results-header">
+      <h3>${results.length} document${results.length === 1 ? '' : 's'} found for "${keyword}"</h3>
+    </div>
+  `;
+
+  html += renderResultCard(topResult, true);
+
+  if (remainingResults.length > 0) {
+    html += `
+      <div class="collapsible-results">
+        <button type="button" id="other-results-toggle" class="collapsible-toggle">
+          <span class="toggle-icon">▶</span>
+          ${remainingResults.length} other result${remainingResults.length === 1 ? '' : 's'}
+        </button>
+
+        <div id="other-results-list" class="collapsible-content" style="display: none;">
+          ${remainingResults.map(item => renderResultCard(item, false)).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  safeSetHTML(searchResultsContainer, html);
+
+  const toggleBtn = document.getElementById('other-results-toggle');
+  const collapsibleContent = document.getElementById('other-results-list');
+
+  if (toggleBtn && collapsibleContent) {
+    toggleBtn.addEventListener('click', () => {
+      const isOpen = collapsibleContent.style.display !== 'none';
+      collapsibleContent.style.display = isOpen ? 'none' : 'block';
+
+      const icon = toggleBtn.querySelector('.toggle-icon');
+      if (icon) icon.textContent = isOpen ? '▶' : '▼';
+    });
+  }
+
+  showElement(searchResultsContainer);
+}
+
+function renderResultCard(item, isTopResult) {
+  return `
+    <div class="result-card ${isTopResult ? 'top-result' : ''}">
+      ${isTopResult ? '<span class="top-badge">Top Match</span>' : ''}
+
+      <h3>${item.filename}</h3>
+
+      <p class="result-meta">
+        ${item.keyword_count || 0} ${(item.keyword_count || 0) === 1 ? 'match' : 'matches'}
+        · Category: ${item.category || 'Uncategorized'}
+      </p>
+
+      <p class="result-context">${item.context || 'No context available.'}</p>
+
+      <div class="result-actions">
+        <button type="button" onclick="showDocumentSummary('${item.document_id}')">
+          Preview Summary
+        </button>
+
+        <button type="button" onclick="addToBasket('${item.document_id}', '${item.filename.replace(/'/g, "\\'")}')">
+          Add to Basket
+        </button>
+
+        <button type="button" onclick="sendDownloadRequest('${item.document_id}', '${searchInput.value.trim()}')">
+          Request Single Document
+        </button>
+      </div>
+
+      <div id="summary-${item.document_id}" class="summary-box"></div>
+    </div>
+  `;
 }
 
 async function performSearch() {
@@ -437,6 +584,14 @@ async function sendDownloadRequest(documentId, keyword) {
     }
 }
 
+if (requestBasketBtn) {
+  requestBasketBtn.addEventListener('click', requestBasketDocuments);
+}
+
+if (clearBasketBtn) {
+  clearBasketBtn.addEventListener('click', clearBasket);
+}
+
 // Initialize state
 clearSelection();
 hideElement(searchLoading);
@@ -445,3 +600,5 @@ hideElement(searchMessage);
 hideElement(uploadError);
 hideElement(searchResultsContainer);
 hideElement(uploadResults);
+refreshDocumentCount();
+renderBasket();

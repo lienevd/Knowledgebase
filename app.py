@@ -200,6 +200,37 @@ async def request_download(request: Request):
         "document_name": document.get("filename"),
     }
 
+@app.post("/request-bulk-download")
+async def request_bulk_download(request: Request):
+    payload = await request.json()
+    document_ids = payload.get("document_ids", [])
+    keyword = payload.get("keyword", "")
+
+    if not document_ids:
+        raise HTTPException(status_code=400, detail="No documents selected")
+
+    requested_documents = []
+
+    for document_id in document_ids:
+        document = get_document(document_id)
+
+        if document:
+            save_download_request(
+                document_id,
+                keyword,
+                document.get("filename")
+            )
+
+            requested_documents.append({
+                "document_id": document_id,
+                "filename": document.get("filename", "Unknown"),
+            })
+
+    return {
+        "status": "requested",
+        "message": f"{len(requested_documents)} document request(s) sent to the manager.",
+        "requested_documents": requested_documents,
+    }
 
 @app.get("/search")
 async def search(keyword: str):
@@ -218,68 +249,38 @@ async def search(keyword: str):
     }
 
 
+def summarize_text(text: str, max_chars: int = 700) -> str:
+    clean = " ".join((text or "").split())
+    if not clean:
+        return "No readable content was found for this document."
+
+    sentences = clean.replace("?", ".").replace("!", ".").split(".")
+    summary = ". ".join(sentence.strip() for sentence in sentences[:4] if sentence.strip())
+
+    if not summary:
+        summary = clean[:max_chars]
+
+    if len(summary) > max_chars:
+        summary = summary[:max_chars].rsplit(" ", 1)[0] + "..."
+
+    return summary
+
+
 @app.get("/preview")
 async def preview(document_id: str):
-
     document = get_document(document_id)
 
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    file_path = document.get("file_path")
+    summary = summarize_text(document.get("content", ""))
 
-    if not file_path or not Path(file_path).exists():
-        raise HTTPException(status_code=404, detail="File not available")
-
-    extension = Path(file_path).suffix.lower()
-
-    if extension == ".pdf":
-        return FileResponse(
-            path=file_path,
-            media_type="application/pdf",
-            filename=document.get("filename", "document.pdf"),
-        )
-
-    if extension == ".txt":
-        return FileResponse(
-            path=file_path,
-            media_type="text/plain",
-            filename=document.get("filename", "document.txt"),
-        )
-
-    if extension == ".docx":
-        try:
-            from docx import Document as DocxDocument
-
-            doc = DocxDocument(file_path)
-
-            text_content = "\n\n".join(
-                p.text for p in doc.paragraphs if p.text
-            )
-
-            return HTMLResponse(
-                f"""
-                <html>
-                    <body>
-                        <pre style='white-space: pre-wrap;
-                                    font-family: ui-monospace;'>
-                            {html.escape(text_content)}
-                        </pre>
-                    </body>
-                </html>
-                """
-            )
-
-        except Exception:
-            raise HTTPException(
-                status_code=415,
-                detail="Preview not available for this file type",
-            )
-
-    raise HTTPException(
-        status_code=415,
-        detail="Preview not available for this file type",
-    )
+    return {
+        "document_id": document_id,
+        "filename": document.get("filename", "Unknown"),
+        "category": document.get("category", "Uncategorized"),
+        "summary": summary,
+    }
 
 
 @app.get("/documents-count")
