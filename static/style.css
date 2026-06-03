@@ -763,6 +763,17 @@ button:disabled {
   color: var(--foreground);
 }
 
+.summary-meta {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.summary-box p {
+  white-space: pre-line;
+}
+
 .collapsible-results {
   display: grid;
   gap: 10px;

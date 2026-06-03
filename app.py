@@ -5,7 +5,9 @@ from fastapi.templating import Jinja2Templates
 
 import html
 import json
+import re
 import uuid
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -249,21 +251,81 @@ async def search(keyword: str):
     }
 
 
-def summarize_text(text: str, max_chars: int = 700) -> str:
-    clean = " ".join((text or "").split())
+def normalize_document_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def split_sentences(text: str) -> List[str]:
+    clean = normalize_document_text(text)
+    if not clean:
+        return []
+
+    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", clean)
+    return [
+        sentence.strip()
+        for sentence in sentences
+        if 40 <= len(sentence.strip()) <= 520
+    ]
+
+
+def meaningful_terms(text: str, limit: int = 18) -> List[str]:
+    stop_words = {
+        "about", "after", "also", "and", "are", "because", "been", "but", "can",
+        "for", "from", "has", "have", "into", "its", "may", "not", "our", "that",
+        "the", "their", "there", "these", "this", "those", "was", "were", "will",
+        "with", "within", "you", "your",
+    }
+    words = re.findall(r"[A-Za-z][A-Za-z\-]{3,}", text.lower())
+    counts = Counter(word for word in words if word not in stop_words)
+    return [word for word, _ in counts.most_common(limit)]
+
+
+def summarize_text(text: str, category: str = "", max_sentences: int = 5, max_chars: int = 1100) -> str:
+    clean = normalize_document_text(text)
     if not clean:
         return "No readable content was found for this document."
 
-    sentences = clean.replace("?", ".").replace("!", ".").split(".")
-    summary = ". ".join(sentence.strip() for sentence in sentences[:4] if sentence.strip())
+    sentences = split_sentences(clean)
+    if not sentences:
+        return clean[:max_chars].rsplit(" ", 1)[0] + ("..." if len(clean) > max_chars else "")
 
-    if not summary:
-        summary = clean[:max_chars]
+    important_terms = set(meaningful_terms(clean))
+    category_terms = set(DEFAULT_CATEGORY_RULES.get(category, []))
+    scored_sentences = []
 
+    for index, sentence in enumerate(sentences):
+        sentence_lower = sentence.lower()
+        words = re.findall(r"[A-Za-z][A-Za-z\-]{3,}", sentence_lower)
+        term_hits = sum(1 for word in words if word in important_terms)
+        category_hits = sum(sentence_lower.count(term) for term in category_terms)
+        length_score = 1 if 80 <= len(sentence) <= 260 else 0
+        position_score = max(0, 3 - index * 0.15)
+        score = term_hits + (category_hits * 2) + length_score + position_score
+        scored_sentences.append((score, index, sentence))
+
+    selected = sorted(scored_sentences, reverse=True)[:max_sentences]
+    selected_in_order = [sentence for _, _, sentence in sorted(selected, key=lambda item: item[1])]
+
+    summary = " ".join(selected_in_order)
     if len(summary) > max_chars:
         summary = summary[:max_chars].rsplit(" ", 1)[0] + "..."
 
     return summary
+
+
+def read_document_text(document: Dict) -> str:
+    file_path = document.get("file_path")
+
+    if file_path and Path(file_path).exists():
+        extracted = extract_text(file_path).strip()
+        if extracted:
+            return extracted
+
+        suffix = Path(file_path).suffix.lower()
+        if suffix in {".txt", ".md", ".html", ".htm"}:
+            return Path(file_path).read_text(encoding="utf-8", errors="ignore").strip()
+
+    return (document.get("content") or "").strip()
 
 
 @app.get("/preview")
@@ -273,20 +335,15 @@ async def preview(document_id: str):
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    text = document.get("content", "")
-
-    if not text:
-        file_path = document.get("file_path")
-        if file_path and Path(file_path).exists():
-            text = extract_text(file_path).strip()
-
-    summary = summarize_text(text)
+    text = read_document_text(document)
+    summary = summarize_text(text, category=document.get("category", ""))
 
     return {
         "document_id": document_id,
         "filename": document.get("filename", "Unknown"),
         "category": document.get("category", "Uncategorized"),
         "summary": summary,
+        "source_character_count": len(normalize_document_text(text)),
     }
 
 @app.get("/documents-count")

@@ -16,7 +16,7 @@ def extract_text(file_path: str) -> str:
                 text += page.get_text()
         return text
 
-    if suffix == ".txt":
+    if suffix in {".txt", ".md"}:
         return file_path.read_text(encoding="utf-8", errors="ignore")
 
     if suffix == ".docx":

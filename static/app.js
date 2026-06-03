@@ -198,6 +198,7 @@ async function showDocumentSummary(documentId) {
 
     summaryBox.innerHTML = `
       <strong>Summary</strong>
+      <span class="summary-meta">${Number(data.source_character_count || 0).toLocaleString()} extracted characters read</span>
       <p>${escapeHTML(data.summary)}</p>
     `;
     summaryBox.classList.toggle('active');
