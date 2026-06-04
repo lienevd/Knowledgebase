@@ -4,83 +4,88 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IBC Document Intelligence</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=6" />
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand-section">
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar" aria-label="Workspace sidebar">
+      <div class="sidebar-top">
         <div class="brand-lockup">
-          <div class="brand-mark" aria-hidden="true">IBC</div>
-          <div>
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+          </div>
+          <div class="brand-copy">
             <p class="brand-kicker">Document Intelligence</p>
             <h1 class="brand-title">IBC Analysis</h1>
           </div>
         </div>
+
+        <button class="icon-btn sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
       </div>
 
-      <nav class="navigation-section" aria-label="Primary navigation">
-        <p class="section-label">Navigation</p>
-        <button class="nav-btn active" data-tab="upload-tab">
-          <span class="nav-icon" aria-hidden="true">U</span>
-          <span class="nav-text">Upload Documents</span>
+      <div class="user-card">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='48' fill='%23245b5a'/%3E%3Ccircle cx='48' cy='38' r='15' fill='white' opacity='.95'/%3E%3Cpath d='M22 78c4-17 18-25 26-25s22 8 26 25' fill='white' opacity='.95'/%3E%3C/svg%3E" alt="Profile picture" />
+        <div class="user-copy">
+          <strong>IBC User</strong>
+          <span>Document reviewer</span>
+        </div>
+      </div>
+
+      <nav class="navigation-section" aria-label="Sidebar navigation">
+        <button class="nav-btn tab-link active" data-tab="upload-tab" type="button" title="Upload documents">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+          <span class="nav-text">Upload</span>
         </button>
-        <button class="nav-btn" data-tab="search-tab">
-          <span class="nav-icon" aria-hidden="true">S</span>
-          <span class="nav-text">Search Keywords</span>
+        <button class="nav-btn tab-link" data-tab="search-tab" type="button" title="Search documents">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
+          <span class="nav-text">Search</span>
+        </button>
+        <button class="nav-btn tab-link" data-tab="settings-tab" type="button" title="Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+          <span class="nav-text">Settings</span>
         </button>
       </nav>
 
-      <div class="library-section">
-        <p class="section-label">Library</p>
-        <div class="metric-item">
-          <span class="metric-icon" aria-hidden="true">D</span>
+      <footer class="sidebar-footer">
+        <div class="mini-metrics">
           <div>
-            <p class="metric-label">Documents</p>
-            <p class="metric-value" id="doc-count">0</p>
+            <span>Documents</span>
+            <strong id="doc-count">0</strong>
+          </div>
+          <div>
+            <span>Keywords</span>
+            <strong id="keyword-count">{{ keywords|length }}</strong>
           </div>
         </div>
-        <div class="metric-item">
-          <span class="metric-icon" aria-hidden="true">K</span>
-          <div>
-            <p class="metric-label">Keywords</p>
-            <p class="metric-value" id="keyword-count">{{ keywords|length }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="sidebar-section">
-        <h3>Basket</h3>
-
-        <div class="stat-card">
-          <span>Selected documents</span>
-          <strong id="basket-count">0</strong>
-        </div>
-
-        <div id="basket-list" class="basket-list">
-          <p class="basket-empty">No documents selected yet.</p>
-        </div>
-
-        <button id="request-basket-btn" type="button" disabled>
-          Request Basket
-        </button>
-
-        <button id="clear-basket-btn" type="button" disabled>
-          Clear Basket
-        </button>
-      </div>
+      </footer>
     </aside>
 
     <main class="main-panel">
+      <header class="topbar">
+        <nav class="top-nav" aria-label="Primary navigation">
+          <button class="top-nav-link tab-link active" data-tab="upload-tab" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+            Upload
+          </button>
+          <button class="top-nav-link tab-link" data-tab="search-tab" type="button">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
+            Search
+          </button>
+        </nav>
+
+        <button class="basket-trigger" id="basket-trigger" type="button" aria-haspopup="dialog" aria-controls="basket-drawer">
+          <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 8.5H8L6 3H3"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>
+          Basket
+          <span class="basket-count" data-basket-count>0</span>
+        </button>
+      </header>
+
       <div class="main-banner">
         <div class="banner-copy">
           <p class="eyebrow">Compliance workspace</p>
           <h2>Review documents, find keyword evidence, and request files from one focused workspace.</h2>
-        </div>
-        <div class="banner-pill-group" aria-label="Workflow stages">
-          <span class="pill">Upload</span>
-          <span class="pill">Search</span>
-          <span class="pill">Request</span>
         </div>
       </div>
 
@@ -92,7 +97,9 @@
 
         <div class="upload-container">
           <div class="upload-area" id="upload-area">
-            <div class="upload-icon" aria-hidden="true">+</div>
+            <div class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+            </div>
             <h2 class="upload-title">Select documents</h2>
             <p class="upload-subtitle">PDF, Word, text, Markdown, and HTML files are supported.</p>
             <div class="file-types" aria-label="Supported file types">
@@ -155,12 +162,71 @@
           <div id="search-results-container"></div>
         </div>
       </div>
+
+      <div id="settings-tab" class="tab-content">
+        <header class="page-header">
+          <h1>Settings</h1>
+          <p class="page-subtitle">Manage workspace preferences and request defaults.</p>
+        </header>
+
+        <section class="settings-grid">
+          <div class="settings-panel">
+            <h2>Profile</h2>
+            <label>
+              Display name
+              <input type="text" value="IBC User" />
+            </label>
+            <label>
+              Role
+              <input type="text" value="Document reviewer" />
+            </label>
+          </div>
+          <div class="settings-panel">
+            <h2>Requests</h2>
+            <label>
+              Request owner
+              <input type="email" value="owner@example.com" />
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" checked />
+              Include keyword context in basket checkout
+            </label>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
+
+  <div class="drawer-overlay" id="drawer-overlay" hidden></div>
+  <aside class="basket-drawer" id="basket-drawer" role="dialog" aria-modal="true" aria-labelledby="basket-title" hidden>
+    <header class="drawer-header">
+      <div>
+        <p class="eyebrow">Request basket</p>
+        <h2 id="basket-title">Selected documents</h2>
+      </div>
+      <button class="icon-btn" id="basket-close" type="button" aria-label="Close basket">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </header>
+
+    <div class="drawer-summary">
+      <span data-basket-count>0</span>
+      <p>documents ready to request</p>
+    </div>
+
+    <div id="basket-list" class="basket-list">
+      <p class="basket-empty">No documents selected yet.</p>
+    </div>
+
+    <footer class="drawer-footer">
+      <button id="clear-basket-btn" class="btn-secondary" type="button" disabled>Clear Basket</button>
+      <button id="request-basket-btn" class="btn-primary" type="button" disabled>Checkout</button>
+    </footer>
+  </aside>
 
   <script>
     window.KEYWORD_SUGGESTIONS = {{ keywords | tojson }} || [];
   </script>
-  <script src="{{ url_for('static', path='/app.js') }}?v=5"></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v=6"></script>
 </body>
 </html>

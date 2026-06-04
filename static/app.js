@@ -1,4 +1,10 @@
-const basketCountEl = document.getElementById('basket-count');
+const appShell = document.getElementById('app-shell');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const basketCountEls = document.querySelectorAll('[data-basket-count]');
+const basketTrigger = document.getElementById('basket-trigger');
+const basketDrawer = document.getElementById('basket-drawer');
+const basketClose = document.getElementById('basket-close');
+const drawerOverlay = document.getElementById('drawer-overlay');
 const basketListEl = document.getElementById('basket-list');
 const requestBasketBtn = document.getElementById('request-basket-btn');
 const clearBasketBtn = document.getElementById('clear-basket-btn');
@@ -64,7 +70,7 @@ function setLoading(el, enabled) {
 }
 
 function activateTab(tabName) {
-  document.querySelectorAll('.nav-btn').forEach((btn) => {
+  document.querySelectorAll('.tab-link').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });
 
@@ -74,12 +80,39 @@ function activateTab(tabName) {
 }
 
 document.addEventListener('click', (event) => {
-  const navBtn = event.target.closest('.nav-btn');
+  const navBtn = event.target.closest('.tab-link');
   if (!navBtn || !navBtn.dataset.tab) return;
 
   event.preventDefault();
   activateTab(navBtn.dataset.tab);
 });
+
+function toggleSidebar() {
+  const isCollapsed = appShell?.classList.toggle('sidebar-collapsed');
+  if (sidebarToggle) {
+    sidebarToggle.setAttribute('aria-expanded', String(!isCollapsed));
+    sidebarToggle.setAttribute('aria-label', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+  }
+}
+
+function openBasketDrawer() {
+  renderBasket();
+  basketDrawer?.removeAttribute('hidden');
+  drawerOverlay?.removeAttribute('hidden');
+  requestAnimationFrame(() => {
+    basketDrawer?.classList.add('active');
+    drawerOverlay?.classList.add('active');
+  });
+}
+
+function closeBasketDrawer() {
+  basketDrawer?.classList.remove('active');
+  drawerOverlay?.classList.remove('active');
+  window.setTimeout(() => {
+    basketDrawer?.setAttribute('hidden', 'true');
+    drawerOverlay?.setAttribute('hidden', 'true');
+  }, 180);
+}
 
 async function refreshDocumentCount() {
   try {
@@ -124,9 +157,9 @@ function clearBasket() {
 }
 
 function renderBasket() {
-  if (basketCountEl) {
-    basketCountEl.textContent = basket.length;
-  }
+  basketCountEls.forEach((el) => {
+    el.textContent = basket.length;
+  });
 
   if (!basketListEl) return;
 
@@ -139,9 +172,12 @@ function renderBasket() {
 
   basketListEl.innerHTML = basket.map((item) => `
     <div class="basket-item">
-      <span>${escapeHTML(item.filename)}</span>
-      <button type="button" class="basket-remove-btn" data-remove-basket="${escapeHTML(item.document_id)}">
-        Remove
+      <div>
+        <strong>${escapeHTML(item.filename)}</strong>
+        <span>ID ${escapeHTML(item.document_id)}</span>
+      </div>
+      <button type="button" class="basket-remove-btn" data-remove-basket="${escapeHTML(item.document_id)}" aria-label="Remove ${escapeHTML(item.filename)} from basket">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
       </button>
     </div>
   `).join('');
@@ -178,6 +214,7 @@ async function requestBasketDocuments() {
     safeSetText(searchMessage, data.message);
     showElement(searchMessage);
     clearBasket();
+    closeBasketDrawer();
   } catch (error) {
     safeSetText(searchError, error.message || 'Unable to request basket documents.');
     showElement(searchError);
@@ -437,15 +474,18 @@ function renderResultCard(item, isTopResult) {
 
       <div class="result-actions">
         <button type="button" data-result-action="summary" data-document-id="${documentId}" data-filename="${filename}">
-          Preview Summary
+          <svg viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+          Preview
         </button>
 
         <button type="button" data-result-action="basket" data-document-id="${documentId}" data-filename="${filename}">
+          <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 8.5H8L6 3H3"/><path d="M10 11h6"/></svg>
           Add to Basket
         </button>
 
         <button type="button" data-result-action="request" data-document-id="${documentId}" data-filename="${filename}">
-          Request Single Document
+          <svg viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+          Request
         </button>
       </div>
 
@@ -599,6 +639,26 @@ if (requestBasketBtn) {
 if (clearBasketBtn) {
   clearBasketBtn.addEventListener('click', clearBasket);
 }
+
+if (sidebarToggle) {
+  sidebarToggle.addEventListener('click', toggleSidebar);
+}
+
+if (basketTrigger) {
+  basketTrigger.addEventListener('click', openBasketDrawer);
+}
+
+if (basketClose) {
+  basketClose.addEventListener('click', closeBasketDrawer);
+}
+
+if (drawerOverlay) {
+  drawerOverlay.addEventListener('click', closeBasketDrawer);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeBasketDrawer();
+});
 
 clearSelection();
 hideElement(searchLoading);
