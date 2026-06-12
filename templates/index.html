@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IBC Document Intelligence</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=8" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=14" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -224,7 +224,7 @@
             <h2>Requests</h2>
             <label>
               Request owner
-              <input type="email" value="owner@example.com" />
+              <input id="request-owner-email" type="email" value="{{ request_owner_email }}" />
             </label>
             <label class="toggle-row">
               <input type="checkbox" checked />
@@ -257,6 +257,18 @@
       <p class="basket-empty">No documents selected yet.</p>
     </div>
 
+    <div class="request-details" id="basket-request-details" hidden>
+      <label class="request-message-field" for="requester-email">
+        Your email
+        <input id="requester-email" type="email" placeholder="you@example.com" autocomplete="email" />
+      </label>
+
+      <label class="request-message-field drawer-request-message" for="basket-request-message">
+        Message to admin <span>optional</span>
+        <textarea id="basket-request-message" rows="4" placeholder="Tell the admin what you need the documents for"></textarea>
+      </label>
+    </div>
+
     <footer class="drawer-footer">
       <button id="clear-basket-btn" class="btn-secondary" type="button" disabled>Clear Basket</button>
       <button id="request-basket-btn" class="btn-primary" type="button" disabled>Checkout</button>
@@ -265,7 +277,8 @@
 
   <script>
     window.KEYWORD_SUGGESTIONS = {{ keywords | tojson }} || [];
+    window.DEFAULT_REQUEST_OWNER_EMAIL = {{ request_owner_email | tojson }};
   </script>
-  <script src="{{ url_for('static', path='/app.js') }}?v=8"></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v=15"></script>
 </body>
 </html>

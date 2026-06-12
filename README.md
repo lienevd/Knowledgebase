@@ -124,6 +124,25 @@ Useful options:
 
 From VS Code, you can also run `Terminal > Run Task... > Start IBC app`.
 
+### Email request setup
+
+The Request and Checkout buttons send an email through SMTP when these environment
+variables are set before starting the app:
+
+```powershell
+$env:SMTP_HOST="smtp.gmail.com"
+$env:SMTP_PORT="587"
+$env:SMTP_USERNAME="your.email@gmail.com"
+$env:SMTP_PASSWORD="your-app-password"
+$env:SMTP_FROM="your.email@gmail.com"
+$env:REQUEST_OWNER_EMAIL="s.e.vdongen@gmail.com"
+.\start.ps1
+```
+
+Use an app password or SMTP token from your email provider instead of your normal
+account password. The request owner can be changed in Settings while the app is
+running, or later by changing `REQUEST_OWNER_EMAIL` before startup.
+
 ### Manual start
 
 ```bash

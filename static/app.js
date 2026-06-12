@@ -34,10 +34,14 @@
     documentsListCount: 'documents-list-count',
     documentsCategoryFilter: 'documents-category-filter',
     refreshDocumentsBtn: 'refresh-documents-btn',
+    requestOwnerEmail: 'request-owner-email',
+    basketRequestMessageField: 'basket-request-message-field',
+    basketRequestMessage: 'basket-request-message',
   };
 
   const STORAGE_KEYS = {
     basket: 'documentBasket',
+    requestOwnerEmail: 'requestOwnerEmail',
   };
 
   const state = {
@@ -46,6 +50,8 @@
     keywordSuggestions: window.KEYWORD_SUGGESTIONS || [],
     documents: [],
     documentCategory: 'all',
+    requestOwnerEmail: readStoredRequestOwnerEmail(),
+    requestMessage: '',
   };
 
   const els = getElements(SELECTORS);
@@ -65,6 +71,14 @@
       console.warn('Could not read stored basket:', error);
       return [];
     }
+  }
+
+  function readStoredRequestOwnerEmail() {
+    return (
+      localStorage.getItem(STORAGE_KEYS.requestOwnerEmail)
+      || window.DEFAULT_REQUEST_OWNER_EMAIL
+      || 's.e.vdongen@gmail.com'
+    );
   }
 
   function escapeHTML(value) {
@@ -131,13 +145,6 @@
       return parseJsonResponse(response, 'Could not load documents.');
     },
 
-    async deleteDocument(documentId) {
-      const response = await fetch(`/documents/${encodeURIComponent(documentId)}`, {
-        method: 'DELETE',
-      });
-      return parseJsonResponse(response, 'Could not delete document.');
-    },
-
     async uploadDocuments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
@@ -155,21 +162,16 @@
       return parseJsonResponse(response, 'Search failed.');
     },
 
-    async requestDownload(documentId, keyword) {
-      const response = await fetch('/request-download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_id: documentId, keyword }),
-      });
-
-      return parseJsonResponse(response, 'Unable to request document.');
-    },
-
-    async requestBulkDownload(documentIds, keyword) {
+    async requestBulkDownload(documentIds, keyword, requestOwnerEmail, requestMessage) {
       const response = await fetch('/request-bulk-download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_ids: documentIds, keyword }),
+        body: JSON.stringify({
+          document_ids: documentIds,
+          keyword,
+          request_owner_email: requestOwnerEmail,
+          request_message: requestMessage,
+        }),
       });
 
       return parseJsonResponse(response, 'Unable to request basket documents.');
@@ -192,6 +194,26 @@
       });
 
       els.sidebarToggle?.addEventListener('click', () => this.toggleSidebar());
+      els.requestOwnerEmail?.addEventListener('input', (event) => {
+        state.requestOwnerEmail = event.target.value.trim();
+        localStorage.setItem(STORAGE_KEYS.requestOwnerEmail, state.requestOwnerEmail);
+      });
+
+      if (els.requestOwnerEmail) {
+        els.requestOwnerEmail.value = state.requestOwnerEmail;
+      }
+
+      els.basketRequestMessage?.addEventListener('input', (event) => {
+        this.updateRequestMessage(event.target.value);
+      });
+    },
+
+    updateRequestMessage(message) {
+      state.requestMessage = message;
+
+      if (els.basketRequestMessage && els.basketRequestMessage.value !== message) {
+        els.basketRequestMessage.value = message;
+      }
     },
 
     activateTab(tabName) {
@@ -278,7 +300,7 @@
       this.render();
     },
 
-    openDrawer() {
+    openDrawer({ focusMessage = false } = {}) {
       this.render();
       els.basketDrawer?.removeAttribute('hidden');
       els.drawerOverlay?.removeAttribute('hidden');
@@ -286,6 +308,9 @@
       requestAnimationFrame(() => {
         els.basketDrawer?.classList.add('active');
         els.drawerOverlay?.classList.add('active');
+        if (focusMessage) {
+          els.basketRequestMessage?.focus();
+        }
       });
     },
 
@@ -306,6 +331,8 @@
         const data = await api.requestBulkDownload(
           state.basket.map((item) => item.document_id),
           els.searchInput?.value || '',
+          state.requestOwnerEmail,
+          state.requestMessage,
         );
 
         showMessage(els.searchMessage, data.message);
@@ -328,9 +355,13 @@
 
       if (els.requestBasketBtn) els.requestBasketBtn.disabled = state.basket.length === 0;
       if (els.clearBasketBtn) els.clearBasketBtn.disabled = state.basket.length === 0;
+      if (els.basketRequestMessageField) {
+        els.basketRequestMessageField.hidden = state.basket.length === 0;
+      }
 
       if (!state.basket.length) {
         setHTML(els.basketList, '<p class="basket-empty">No documents selected yet.</p>');
+        navigation.updateRequestMessage('');
         return;
       }
 
@@ -429,10 +460,6 @@
         state.documentCategory = event.target.value || 'all';
         this.renderCurrent();
       });
-      els.documentsList?.addEventListener('click', (event) => {
-        const deleteBtn = event.target.closest('[data-delete-document]');
-        if (deleteBtn) this.delete(deleteBtn.dataset.deleteDocument, deleteBtn.dataset.filename);
-      });
     },
 
     async load({ clearStatus = true } = {}) {
@@ -452,27 +479,6 @@
         );
       } finally {
         setBusy(els.documentsLoading, false);
-      }
-    },
-
-    async delete(documentId, filename = 'this document') {
-      if (!documentId) return;
-      if (!window.confirm(`Delete "${filename}" from the app?`)) return;
-
-      clearMessage(els.documentsError);
-      clearMessage(els.documentsMessage);
-
-      try {
-        const data = await api.deleteDocument(documentId);
-        basket.remove(documentId);
-        await this.load({ clearStatus: false });
-        showMessage(els.documentsMessage, data.message || 'Document deleted.');
-        metrics.refreshDocumentCount();
-      } catch (error) {
-        showMessage(
-          els.documentsError,
-          error.message || 'Unable to delete document. Please try again.',
-        );
       }
     },
 
@@ -656,7 +662,8 @@
       }
 
       if (action === 'request') {
-        await this.requestDocument(documentId);
+        basket.add(documentId, filename);
+        basket.openDrawer({ focusMessage: true });
       }
     },
 
@@ -674,22 +681,6 @@
       }
     },
 
-    async requestDocument(documentId) {
-      clearMessage(els.searchError);
-
-      try {
-        const data = await api.requestDownload(
-          documentId,
-          els.searchInput?.value.trim() || '',
-        );
-        showMessage(els.searchMessage, data.message || 'Your request has been submitted.');
-      } catch (error) {
-        showMessage(
-          els.searchError,
-          error.message || 'Unable to request document. Please try again.',
-        );
-      }
-    },
   };
 
   function renderBasketItem(item) {
@@ -878,7 +869,6 @@
         <div class="documents-row documents-head" role="row">
           <div role="columnheader">Title</div>
           <div role="columnheader">Category</div>
-          <div role="columnheader">Actions</div>
         </div>
         ${items.map(renderDocumentRow).join('')}
       </div>
@@ -886,7 +876,6 @@
   }
 
   function renderDocumentRow(item) {
-    const documentId = escapeHTML(item.document_id);
     const title = escapeHTML(item.title || 'Untitled document');
     const category = escapeHTML(item.category || 'Uncategorized');
 
@@ -894,11 +883,6 @@
       <div class="documents-row" role="row">
         <div class="documents-title" role="cell">${title}</div>
         <div role="cell"><span class="pill">${category}</span></div>
-        <div role="cell" class="documents-actions">
-          <button type="button" class="document-delete-btn" data-delete-document="${documentId}" data-filename="${title}" aria-label="Delete ${title}" title="Delete">
-            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          </button>
-        </div>
       </div>
     `;
   }

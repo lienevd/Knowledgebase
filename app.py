@@ -5,10 +5,13 @@ from fastapi.templating import Jinja2Templates
 
 import html
 import json
+import os
 import re
+import smtplib
 import uuid
 from collections import Counter
 from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -62,6 +65,7 @@ REQUESTS_FILE = BASE_DIR / "data" / "download_requests.json"
 SEARCH_TEXT_CACHE_FILE = BASE_DIR / "data" / "search_text_cache.json"
 SEARCH_TEXT_CACHE: Optional[Dict[str, str]] = None
 SEARCH_TEXT_CACHE_CHANGED = False
+DEFAULT_REQUEST_OWNER_EMAIL = os.getenv("REQUEST_OWNER_EMAIL", "s.e.vdongen@gmail.com")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -95,6 +99,7 @@ async def home(request: Request):
         context={
             "keyword_hint": keyword_hint,
             "keywords": KEYWORDS,
+            "request_owner_email": DEFAULT_REQUEST_OWNER_EMAIL,
         },
     )
 
@@ -178,7 +183,12 @@ async def download(document_id: str):
     )
 
 
-def save_download_request(document_id: str, keyword: Optional[str] = None, filename: Optional[str] = None):
+def save_download_request(
+    document_id: str,
+    keyword: Optional[str] = None,
+    filename: Optional[str] = None,
+    request_message: Optional[str] = None,
+):
     REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     if REQUESTS_FILE.exists():
         with REQUESTS_FILE.open("r", encoding="utf-8") as request_file:
@@ -190,6 +200,7 @@ def save_download_request(document_id: str, keyword: Optional[str] = None, filen
         "document_id": document_id,
         "filename": filename or "Unknown",
         "keyword": keyword or "",
+        "request_message": request_message or "",
         "requested_at": datetime.utcnow().isoformat() + "Z",
         "status": "pending",
     })
@@ -198,11 +209,93 @@ def save_download_request(document_id: str, keyword: Optional[str] = None, filen
         json.dump(requests, request_file, indent=2, ensure_ascii=False)
 
 
+def clean_email_address(value: Optional[str]) -> str:
+    email_address = (value or "").strip()
+    if not email_address:
+        return DEFAULT_REQUEST_OWNER_EMAIL
+
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email_address):
+        raise HTTPException(status_code=400, detail="Request owner email is invalid")
+
+    return email_address
+
+
+def clean_request_message(value: Optional[str]) -> str:
+    return (value or "").strip()[:1200]
+
+
+def smtp_config() -> Dict[str, str]:
+    return {
+        "host": os.getenv("SMTP_HOST", "").strip(),
+        "port": os.getenv("SMTP_PORT", "587").strip(),
+        "username": os.getenv("SMTP_USERNAME", "").strip(),
+        "password": os.getenv("SMTP_PASSWORD", "").strip(),
+        "sender": os.getenv("SMTP_FROM", "").strip(),
+        "use_tls": os.getenv("SMTP_USE_TLS", "true").strip().lower(),
+    }
+
+
+def send_email(to_email: str, subject: str, body: str) -> None:
+    config = smtp_config()
+    missing = [
+        name
+        for name in ("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM")
+        if not os.getenv(name)
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Email is not configured. Set {', '.join(missing)} before sending requests.",
+        )
+
+    message = EmailMessage()
+    message["From"] = config["sender"]
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.set_content(body)
+
+    try:
+        port = int(config["port"] or "587")
+        with smtplib.SMTP(config["host"], port, timeout=20) as smtp:
+            if config["use_tls"] not in {"0", "false", "no", "off"}:
+                smtp.starttls()
+            smtp.login(config["username"], config["password"])
+            smtp.send_message(message)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not send request email: {exc}") from exc
+
+
+def build_request_email_body(
+    documents: List[Dict[str, str]],
+    keyword: Optional[str] = None,
+    request_message: Optional[str] = None,
+) -> str:
+    admin_message = request_message or "Not provided"
+    lines = [
+        "A document download request was submitted from IBC Document Intelligence.",
+        "",
+        f"Keyword/context: {keyword or 'Not provided'}",
+        f"Message to admin: {admin_message}",
+        f"Requested at: {datetime.utcnow().isoformat()}Z",
+        "",
+        "Requested document(s):",
+    ]
+
+    for item in documents:
+        lines.append(f"- {item.get('filename', 'Unknown')} (ID: {item.get('document_id', 'Unknown')})")
+
+    return "\n".join(lines)
+
+
 @app.post("/request-download")
 async def request_download(request: Request):
     payload = await request.json()
     document_id = payload.get("document_id")
     keyword = payload.get("keyword")
+    request_owner_email = clean_email_address(payload.get("request_owner_email"))
+    request_message = clean_request_message(payload.get("request_message"))
 
     if not document_id:
         raise HTTPException(status_code=400, detail="Document ID is required")
@@ -211,10 +304,19 @@ async def request_download(request: Request):
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    save_download_request(document_id, keyword, document.get("filename"))
+    requested_documents = [{
+        "document_id": document_id,
+        "filename": document.get("filename", "Unknown"),
+    }]
+    send_email(
+        request_owner_email,
+        "Document download request",
+        build_request_email_body(requested_documents, keyword, request_message),
+    )
+    save_download_request(document_id, keyword, document.get("filename"), request_message)
     return {
         "status": "requested",
-        "message": "Your download request has been sent to the manager.",
+        "message": f"Your download request has been emailed to {request_owner_email}.",
         "document_name": document.get("filename"),
     }
 
@@ -223,6 +325,8 @@ async def request_bulk_download(request: Request):
     payload = await request.json()
     document_ids = payload.get("document_ids", [])
     keyword = payload.get("keyword", "")
+    request_owner_email = clean_email_address(payload.get("request_owner_email"))
+    request_message = clean_request_message(payload.get("request_message"))
 
     if not document_ids:
         raise HTTPException(status_code=400, detail="No documents selected")
@@ -233,20 +337,31 @@ async def request_bulk_download(request: Request):
         document = get_document(document_id)
 
         if document:
-            save_download_request(
-                document_id,
-                keyword,
-                document.get("filename")
-            )
-
             requested_documents.append({
                 "document_id": document_id,
                 "filename": document.get("filename", "Unknown"),
             })
 
+    if not requested_documents:
+        raise HTTPException(status_code=404, detail="No selected documents were found")
+
+    send_email(
+        request_owner_email,
+        "Document basket download request",
+        build_request_email_body(requested_documents, keyword, request_message),
+    )
+
+    for requested_document in requested_documents:
+        save_download_request(
+            requested_document["document_id"],
+            keyword,
+            requested_document["filename"],
+            request_message,
+        )
+
     return {
         "status": "requested",
-        "message": f"{len(requested_documents)} document request(s) sent to the manager.",
+        "message": f"{len(requested_documents)} document request(s) emailed to {request_owner_email}.",
         "requested_documents": requested_documents,
     }
 
