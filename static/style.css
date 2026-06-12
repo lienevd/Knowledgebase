@@ -114,7 +114,8 @@ svg {
 .drawer-header,
 .drawer-footer,
 .button-group,
-.result-actions {
+.result-actions,
+.documents-toolbar {
   display: flex;
   align-items: center;
 }
@@ -501,7 +502,8 @@ svg {
 }
 
 .upload-container,
-.search-container {
+.search-container,
+.documents-container {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -513,7 +515,9 @@ svg {
 .selected-files-box,
 .empty-search,
 .empty-state,
-.settings-panel {
+.settings-panel,
+.documents-toolbar,
+.documents-table {
   border: 1px solid var(--border);
   border-radius: 0;
   background: var(--surface);
@@ -592,7 +596,8 @@ svg {
 .btn-secondary,
 .result-actions button,
 .collapsible-toggle,
-.basket-remove-btn {
+.basket-remove-btn,
+.document-delete-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -632,7 +637,8 @@ svg {
   background: var(--surface-soft);
 }
 
-.basket-remove-btn {
+.basket-remove-btn,
+.document-delete-btn {
   width: 36px;
   height: 36px;
   min-height: 36px;
@@ -985,6 +991,56 @@ button:disabled {
   gap: 18px;
 }
 
+.documents-toolbar {
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.documents-count {
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.documents-table {
+  overflow: hidden;
+}
+
+.documents-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(180px, 0.8fr) minmax(70px, auto);
+  gap: 18px;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.documents-row:last-child {
+  border-bottom: 0;
+}
+
+.documents-head {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.documents-title {
+  min-width: 0;
+  color: var(--foreground);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.documents-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .settings-panel {
   display: grid;
   gap: 14px;
@@ -1176,7 +1232,7 @@ button:disabled {
 
   .navigation-section {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .sidebar-footer {
@@ -1200,14 +1256,16 @@ button:disabled {
 
   .search-input-group,
   .button-group,
-  .drawer-footer {
+  .drawer-footer,
+  .documents-toolbar {
     flex-direction: column;
   }
 
   .btn-primary,
   .btn-secondary,
   .search-input-group .btn-primary,
-  .drawer-footer button {
+  .drawer-footer button,
+  .documents-toolbar button {
     width: 100%;
   }
 
@@ -1224,7 +1282,7 @@ button:disabled {
 
   .top-nav {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .top-nav-link,
@@ -1248,8 +1306,23 @@ button:disabled {
   .upload-area,
   .search-card,
   .result-card,
-  .settings-panel {
+  .settings-panel,
+  .documents-toolbar {
     padding: 16px;
+  }
+
+  .documents-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .documents-actions {
+    justify-content: flex-start;
+  }
+
+  .documents-head {
+    display: none;
   }
 
   .selected-files-box li {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IBC Document Intelligence</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=6" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=8" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -42,6 +42,10 @@
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
           <span class="nav-text">Search</span>
         </button>
+        <button class="nav-btn tab-link" data-tab="documents-tab" type="button" title="View documents">
+          <svg viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+          <span class="nav-text">Documents</span>
+        </button>
         <button class="nav-btn tab-link" data-tab="settings-tab" type="button" title="Settings">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
           <span class="nav-text">Settings</span>
@@ -72,6 +76,10 @@
           <button class="top-nav-link tab-link" data-tab="search-tab" type="button">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
             Search
+          </button>
+          <button class="top-nav-link tab-link" data-tab="documents-tab" type="button">
+            <svg viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            Documents
           </button>
         </nav>
 
@@ -163,6 +171,37 @@
         </div>
       </div>
 
+      <div id="documents-tab" class="tab-content">
+        <header class="page-header">
+          <h1>Documents</h1>
+          <p class="page-subtitle">Browse uploaded documents and their assigned categories.</p>
+        </header>
+
+        <div class="documents-container">
+          <div class="documents-toolbar">
+            <div>
+              <span class="documents-count" id="documents-list-count">0 documents</span>
+            </div>
+            <label class="documents-filter">
+              <span>Category</span>
+              <select id="documents-category-filter">
+                <option value="all">All categories</option>
+              </select>
+            </label>
+            <button class="btn-secondary" id="refresh-documents-btn" type="button">Refresh</button>
+          </div>
+
+          <div class="loading" id="documents-loading" hidden>
+            <div class="spinner"></div>
+            <p>Loading documents...</p>
+          </div>
+
+          <div class="error" id="documents-error"></div>
+          <div class="message message-success" id="documents-message" hidden></div>
+          <div id="documents-list" class="documents-list"></div>
+        </div>
+      </div>
+
       <div id="settings-tab" class="tab-content">
         <header class="page-header">
           <h1>Settings</h1>
@@ -227,6 +266,6 @@
   <script>
     window.KEYWORD_SUGGESTIONS = {{ keywords | tojson }} || [];
   </script>
-  <script src="{{ url_for('static', path='/app.js') }}?v=6"></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v=8"></script>
 </body>
 </html>

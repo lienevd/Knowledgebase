@@ -38,6 +38,17 @@ def index_document(document_id: str, filename: str, content: str, category: str,
     writer.commit()
 
 
+def delete_indexed_document(document_id: str, index_dir: str | Path = None):
+    index_path = Path(index_dir or INDEX_DIR)
+    if not exists_in(str(index_path)):
+        return
+
+    ix = open_dir(str(index_path))
+    writer = ix.writer()
+    writer.delete_by_term("document_id", document_id)
+    writer.commit()
+
+
 def search_index(query: str, index_dir: str | Path = None, limit: int = 10) -> List[Dict]:
     index_path = Path(index_dir or INDEX_DIR)
     if not exists_in(str(index_path)):

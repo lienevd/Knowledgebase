@@ -93,11 +93,43 @@ ibc-document-intelligence/
 
 ## Getting Started
 
+### Windows quick start
+
+Run one of these from the project folder:
+
+```powershell
+.\start.ps1
+```
+
+or:
+
+```bat
+start.bat
+```
+
+The startup script creates or repairs `.venv`, installs `requirements.txt`, and starts the app at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Useful options:
+
+```powershell
+.\start.ps1 -Port 8001
+.\start.ps1 -SkipInstall
+.\start.ps1 -NoReload
+.\start.ps1 -SetupOnly
+```
+
+From VS Code, you can also run `Terminal > Run Task... > Start IBC app`.
+
+### Manual start
+
 ```bash
-git init
-python -m venv venv
-pip install -r requirements.txt
-python main.py
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## GitHub Repository Setup

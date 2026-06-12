@@ -59,6 +59,10 @@ def store_document(
     keyword_scores: Dict[str, int],
     category: str = "Uncategorized",
     file_path: Optional[str] = None,
+    category_scores: Optional[Dict[str, int]] = None,
+    matched_keywords: Optional[Dict[str, Dict[str, int]]] = None,
+    index_entries: Optional[List[Dict[str, str]]] = None,
+    summary_keywords: Optional[List[str]] = None,
 ):
     """Store a new document"""
     documents = load_documents()
@@ -69,6 +73,11 @@ def store_document(
         "keyword_scores": keyword_scores,
         "category": category,
         "file_path": resolved_path,
+        "category_scores": category_scores or {},
+        "matched_keywords": matched_keywords or {},
+        "index_entries": index_entries or [],
+        "index_results": index_entries or [],
+        "summary_keywords": summary_keywords or [],
     }
     save_documents(documents)
 
@@ -87,7 +96,51 @@ def get_document(document_id: str) -> Optional[Dict]:
 
 def get_all_documents() -> Dict:
     """Get all stored documents"""
-    return load_documents()
+    documents = load_documents()
+    active_documents = {
+        document_id: document
+        for document_id, document in documents.items()
+        if not is_missing_uploaded_file(document)
+    }
+
+    if len(active_documents) != len(documents):
+        save_documents(active_documents)
+
+    return active_documents
+
+
+def is_missing_uploaded_file(document: Dict) -> bool:
+    """Return True when a stored upload record points at a file that no longer exists."""
+    file_path = document.get("file_path")
+    return bool(file_path) and not Path(file_path).exists()
+
+
+def delete_uploaded_file(document: Dict) -> bool:
+    """Delete the uploaded source file if it is still present in the upload folder."""
+    file_path = document.get("file_path")
+    candidate_paths = []
+
+    if file_path:
+        candidate_paths.append(Path(file_path))
+
+    filename = document.get("filename")
+    document_id = document.get("document_id")
+    if document_id and filename:
+        candidate_paths.append(UPLOAD_DIR / f"{document_id}_{Path(filename).name}")
+
+    upload_root = UPLOAD_DIR.resolve()
+    deleted = False
+
+    for path in candidate_paths:
+        try:
+            resolved_path = path.resolve()
+            if resolved_path.exists() and upload_root in resolved_path.parents:
+                resolved_path.unlink()
+                deleted = True
+        except OSError:
+            continue
+
+    return deleted
 
 def search_keyword(keyword: str) -> Dict:
     """
@@ -149,9 +202,12 @@ def extract_context(content: str, keyword: str, context_length: int = 100) -> st
     return context
 
 def delete_document(document_id: str) -> bool:
-    """Delete a document from storage"""
+    """Delete a document from storage and remove its uploaded file when possible."""
     documents = load_documents()
     if document_id in documents:
+        document = documents[document_id]
+        document["document_id"] = document_id
+        delete_uploaded_file(document)
         del documents[document_id]
         save_documents(documents)
         return True

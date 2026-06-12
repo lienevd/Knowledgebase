@@ -13,10 +13,16 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from src.classification.classifier import classify_document
-from src.indexing.indexer import get_or_create_index, index_document
-from src.keywords.keyword_loader import load_keywords
+from src.indexing.indexer import delete_indexed_document, get_or_create_index, index_document
+from src.keywords.keyword_loader import (
+    load_keyword_categories,
+    load_keywords,
+    normalize_category,
+    normalize_keyword,
+)
 from src.processing.extractor import extract_text
 from src.storage.document_store import (
+    delete_document as delete_stored_document,
     get_all_documents,
     get_document,
     save_uploaded_file,
@@ -24,6 +30,7 @@ from src.storage.document_store import (
 )
 
 KEYWORDS = load_keywords()
+KEYWORD_MAP = load_keyword_categories()
 
 KEYWORD_EXAMPLES = KEYWORDS[:8] if KEYWORDS else [
     "security",
@@ -42,6 +49,13 @@ DEFAULT_CATEGORY_RULES = {
     "Privacy": ["privacy", "personal", "data protection", "gdpr"],
 }
 
+
+def display_category(category: Optional[str]) -> str:
+    if not category or category == "Uncategorized":
+        return "Uncategorized"
+
+    return normalize_category(category)
+
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_DIR = BASE_DIR / "data" / "indexdir"
 REQUESTS_FILE = BASE_DIR / "data" / "download_requests.json"
@@ -54,26 +68,13 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-def build_keyword_map(keywords: List[str]) -> Dict[str, List[str]]:
-    categories: Dict[str, List[str]] = {key: [] for key in DEFAULT_CATEGORY_RULES}
-    categories["General"] = []
+if not KEYWORD_MAP:
+    KEYWORD_MAP = {"Security & Risk": KEYWORD_EXAMPLES}
 
-    for keyword_value in keywords:
-        normalized = keyword_value.lower()
-        matched = False
-
-        for category, tokens in DEFAULT_CATEGORY_RULES.items():
-            if any(token in normalized for token in tokens):
-                categories[category].append(keyword_value)
-                matched = True
-
-        if not matched:
-            categories["General"].append(keyword_value)
-
-    return {category: values for category, values in categories.items() if values}
-
-
-KEYWORD_MAP = build_keyword_map(KEYWORDS) if KEYWORDS else {"Security & Risk": KEYWORD_EXAMPLES}
+KEYWORD_TO_CATEGORIES: Dict[str, List[str]] = {}
+for category_name, category_keywords in KEYWORD_MAP.items():
+    for keyword_value in category_keywords:
+        KEYWORD_TO_CATEGORIES.setdefault(normalize_keyword(keyword_value), []).append(category_name)
 
 
 @app.on_event("startup")
@@ -116,13 +117,22 @@ async def upload_files(files: List[UploadFile] = File(...)):
             if not extracted_text:
                 raise ValueError("No text could be extracted from this file.")
 
-            keyword_scores = {
-                keyword: extracted_text.lower().count(keyword.lower())
-                for keyword in (KEYWORDS or KEYWORD_EXAMPLES)
-            }
-
             classification = classify_document(extracted_text, KEYWORD_MAP)
             category = classification.get("category", "Uncategorized")
+            category_keywords = KEYWORD_MAP.get(category, [])
+            extracted_text_lower = extracted_text.lower()
+            keyword_scores = {}
+            for keyword in category_keywords:
+                count = extracted_text_lower.count(keyword.lower())
+                if count > 0:
+                    keyword_scores[keyword] = count
+            index_entries = build_index_entries(
+                file.filename,
+                extracted_text,
+                category,
+                keyword_scores,
+            )
+            summary_keywords = first_summary_keywords(keyword_scores)
 
             store_document(
                 document_id,
@@ -131,6 +141,10 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 keyword_scores,
                 category=category,
                 file_path=file_path,
+                category_scores=classification.get("scores", {}),
+                matched_keywords=classification.get("matched_keywords", {}),
+                index_entries=index_entries,
+                summary_keywords=summary_keywords,
             )
             index_document(document_id, file.filename, extracted_text, category, INDEX_DIR)
             uploaded_files.append(file.filename)
@@ -265,6 +279,67 @@ def extract_keyword_context(text: str, keyword: str, context_length: int = 150) 
     return context
 
 
+def extract_keyword_snippets(
+    text: str,
+    keyword: str,
+    context_length: int = 32,
+    max_snippets: int = 25,
+) -> List[str]:
+    clean_keyword = keyword.strip()
+    if not clean_keyword:
+        return []
+
+    snippets = []
+    pattern = re.compile(re.escape(clean_keyword), re.IGNORECASE)
+
+    for match in pattern.finditer(text or ""):
+        start = max(0, match.start() - context_length)
+        end = min(len(text), match.end() + context_length)
+        snippet = normalize_document_text((text or "")[start:end])
+
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(text or ""):
+            snippet = snippet + "..."
+
+        snippets.append(snippet)
+        if len(snippets) >= max_snippets:
+            break
+
+    return snippets
+
+
+def build_index_entries(
+    filename: str,
+    text: str,
+    category: str,
+    keyword_scores: Dict[str, int],
+) -> List[Dict[str, str]]:
+    entries = []
+
+    for keyword in keyword_scores:
+        for snippet in extract_keyword_snippets(text, keyword):
+            entries.append({
+                "Filename": filename,
+                "Keyword": keyword,
+                "Category": category,
+                "Snippet": snippet,
+            })
+
+    return entries
+
+
+def first_summary_keywords(keyword_scores: Dict[str, int], limit: int = 10) -> List[str]:
+    return [
+        keyword
+        for keyword, count in sorted(
+            keyword_scores.items(),
+            key=lambda item: (-item[1], item[0].lower()),
+        )
+        if count > 0
+    ][:limit]
+
+
 def is_searchable_stored_text(text: str) -> bool:
     if not text or not text.strip():
         return False
@@ -347,10 +422,53 @@ def sort_results_by_keyword_count(results: List[Dict]) -> List[Dict]:
     )
 
 
+def categories_for_search_keyword(keyword: str) -> List[str]:
+    return KEYWORD_TO_CATEGORIES.get(normalize_keyword(keyword), [])
+
+
+def indexed_keyword_result(document_id: str, document: Dict, keyword: str) -> Optional[Dict]:
+    normalized_query = normalize_keyword(keyword)
+    stored_entries = document.get("index_results") or document.get("index_entries", [])
+    entries = [
+        entry
+        for entry in stored_entries
+        if normalize_keyword(entry.get("Keyword") or entry.get("keyword", "")) == normalized_query
+    ]
+
+    if not entries:
+        return None
+
+    keyword_scores = document.get("keyword_scores", {})
+    indexed_keyword = entries[0].get("Keyword") or entries[0].get("keyword")
+    count = keyword_scores.get(indexed_keyword, len(entries))
+
+    return {
+        "document_id": document_id,
+        "filename": document.get("filename", "Unknown"),
+        "keyword_count": count,
+        "category": display_category(document.get("category")),
+        "context": entries[0].get("Snippet") or entries[0].get("snippet", ""),
+    }
+
+
 def search_documents_by_keyword(keyword: str, limit: int = 10) -> Dict:
     results = []
+    target_categories = categories_for_search_keyword(keyword)
 
     for document_id, document in get_all_documents().items():
+        document_category = document.get("category")
+        if (
+            target_categories
+            and document_category in KEYWORD_MAP
+            and document_category not in target_categories
+        ):
+            continue
+
+        indexed_result = indexed_keyword_result(document_id, document, keyword)
+        if indexed_result:
+            results.append(indexed_result)
+            continue
+
         text = get_searchable_document_text(document)
         count = count_keyword_occurrences(text, keyword)
 
@@ -361,7 +479,7 @@ def search_documents_by_keyword(keyword: str, limit: int = 10) -> Dict:
             "document_id": document_id,
             "filename": document.get("filename", "Unknown"),
             "keyword_count": count,
-            "category": document.get("category", "Uncategorized"),
+            "category": display_category(document.get("category")),
             "context": extract_keyword_context(text, keyword),
         })
 
@@ -375,6 +493,7 @@ def search_documents_by_keyword(keyword: str, limit: int = 10) -> Dict:
         "total_matches": len(results),
         "displayed_matches": len(limited_results),
         "result_limit": limit,
+        "searched_categories": target_categories,
         "top_document": limited_results[0] if limited_results else None,
         "all_results": limited_results,
     }
@@ -417,7 +536,12 @@ def meaningful_terms(text: str, limit: int = 18) -> List[str]:
     return [word for word, _ in counts.most_common(limit)]
 
 
-def summarize_text(text: str, category: str = "", max_sentences: int = 5, max_chars: int = 1100) -> str:
+def summarize_text(
+    text: str,
+    category: str = "",
+    priority_keywords: Optional[List[str]] = None,
+    max_chars: int = 520,
+) -> str:
     clean = normalize_document_text(text)
     if not clean:
         return "No readable content was found for this document."
@@ -426,24 +550,28 @@ def summarize_text(text: str, category: str = "", max_sentences: int = 5, max_ch
     if not sentences:
         return clean[:max_chars].rsplit(" ", 1)[0] + ("..." if len(clean) > max_chars else "")
 
-    important_terms = set(meaningful_terms(clean))
-    category_terms = set(DEFAULT_CATEGORY_RULES.get(category, []))
+    priority_terms = [
+        keyword.lower()
+        for keyword in (priority_keywords or [])
+        if keyword and keyword.strip()
+    ][:10]
+    important_terms = set(priority_terms or meaningful_terms(clean))
+    category_terms = set(KEYWORD_MAP.get(category, DEFAULT_CATEGORY_RULES.get(category, [])))
     scored_sentences = []
 
     for index, sentence in enumerate(sentences):
         sentence_lower = sentence.lower()
         words = re.findall(r"[A-Za-z][A-Za-z\-]{3,}", sentence_lower)
         term_hits = sum(1 for word in words if word in important_terms)
+        priority_hits = sum(sentence_lower.count(term) for term in priority_terms)
         category_hits = sum(sentence_lower.count(term) for term in category_terms)
         length_score = 1 if 80 <= len(sentence) <= 260 else 0
         position_score = max(0, 3 - index * 0.15)
-        score = term_hits + (category_hits * 2) + length_score + position_score
+        score = (priority_hits * 4) + term_hits + (category_hits * 2) + length_score + position_score
         scored_sentences.append((score, index, sentence))
 
-    selected = sorted(scored_sentences, reverse=True)[:max_sentences]
-    selected_in_order = [sentence for _, _, sentence in sorted(selected, key=lambda item: item[1])]
+    _, _, summary = max(scored_sentences, key=lambda item: (item[0], -item[1]))
 
-    summary = " ".join(selected_in_order)
     if len(summary) > max_chars:
         summary = summary[:max_chars].rsplit(" ", 1)[0] + "..."
 
@@ -473,13 +601,21 @@ async def preview(document_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     text = read_document_text(document)
-    summary = summarize_text(text, category=document.get("category", ""))
+    summary_keywords = document.get("summary_keywords") or first_summary_keywords(
+        document.get("keyword_scores", {})
+    )
+    summary = summarize_text(
+        text,
+        category=document.get("category", ""),
+        priority_keywords=summary_keywords,
+    )
 
     return {
         "document_id": document_id,
         "filename": document.get("filename", "Unknown"),
-        "category": document.get("category", "Uncategorized"),
+        "category": display_category(document.get("category")),
         "summary": summary,
+        "summary_keywords": summary_keywords,
         "source_character_count": len(normalize_document_text(text)),
     }
 
@@ -491,3 +627,44 @@ async def get_documents_count():
     documents = get_all_documents()
 
     return {"total_documents": len(documents)}
+
+
+@app.get("/documents")
+async def list_documents():
+    documents = get_all_documents()
+    document_list = [
+        {
+            "document_id": document_id,
+            "title": document.get("filename", "Untitled document"),
+            "category": display_category(document.get("category")),
+        }
+        for document_id, document in documents.items()
+    ]
+
+    document_list.sort(key=lambda item: item["title"].lower())
+
+    return {
+        "total_documents": len(document_list),
+        "documents": document_list,
+    }
+
+
+@app.delete("/documents/{document_id}")
+async def delete_document(document_id: str):
+    document = get_document(document_id)
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    deleted = delete_stored_document(document_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    delete_indexed_document(document_id, INDEX_DIR)
+
+    return {
+        "status": "deleted",
+        "message": "Document deleted.",
+        "document_id": document_id,
+        "filename": document.get("filename", "Unknown"),
+    }
