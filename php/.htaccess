@@ -1,0 +1,29 @@
+# Block direct access to dotfiles (.env, .user.ini, .git, etc.) and Composer
+# metadata before the rewrite rule below would otherwise let real files through.
+<FilesMatch "^(\.env.*|\.user\.ini|composer\.(json|lock))$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Route every request that isn't a real file/directory to the front controller.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Required so upload.php can parse the raw multipart body itself (see
+# src/MultipartParser.php) instead of relying on PHP's $_FILES, which only
+# keeps the last part when multiple files share the same field name.
+# Only takes effect under mod_php; PHP-FPM hosts must use .user.ini instead
+# (already provided alongside this file).
+<IfModule mod_php.c>
+    php_flag enable_post_data_reading off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag enable_post_data_reading off
+</IfModule>
