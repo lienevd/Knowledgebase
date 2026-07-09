@@ -35,13 +35,15 @@
     documentsCategoryFilter: 'documents-category-filter',
     refreshDocumentsBtn: 'refresh-documents-btn',
     requestOwnerEmail: 'request-owner-email',
-    basketRequestMessageField: 'basket-request-message-field',
+    basketRequestDetails: 'basket-request-details',
+    requesterEmail: 'requester-email',
     basketRequestMessage: 'basket-request-message',
   };
 
   const STORAGE_KEYS = {
     basket: 'documentBasket',
     requestOwnerEmail: 'requestOwnerEmail',
+    requesterEmail: 'requesterEmail',
   };
 
   const state = {
@@ -51,6 +53,7 @@
     documents: [],
     documentCategory: 'all',
     requestOwnerEmail: readStoredRequestOwnerEmail(),
+    requesterEmail: readStoredRequesterEmail(),
     requestMessage: '',
   };
 
@@ -79,6 +82,14 @@
       || window.DEFAULT_REQUEST_OWNER_EMAIL
       || 's.e.vdongen@gmail.com'
     );
+  }
+
+  function readStoredRequesterEmail() {
+    return localStorage.getItem(STORAGE_KEYS.requesterEmail) || '';
+  }
+
+  function isValidEmail(value) {
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((value || '').trim());
   }
 
   function escapeHTML(value) {
@@ -145,6 +156,13 @@
       return parseJsonResponse(response, 'Could not load documents.');
     },
 
+    async deleteDocument(documentId) {
+      const response = await fetch(`/documents/${encodeURIComponent(documentId)}`, {
+        method: 'DELETE',
+      });
+      return parseJsonResponse(response, 'Could not delete document.');
+    },
+
     async uploadDocuments(files) {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
@@ -162,7 +180,13 @@
       return parseJsonResponse(response, 'Search failed.');
     },
 
-    async requestBulkDownload(documentIds, keyword, requestOwnerEmail, requestMessage) {
+    async requestBulkDownload(
+      documentIds,
+      keyword,
+      requestOwnerEmail,
+      requesterEmail,
+      requestMessage,
+    ) {
       const response = await fetch('/request-bulk-download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,6 +194,7 @@
           document_ids: documentIds,
           keyword,
           request_owner_email: requestOwnerEmail,
+          requester_email: requesterEmail,
           request_message: requestMessage,
         }),
       });
@@ -201,6 +226,15 @@
 
       if (els.requestOwnerEmail) {
         els.requestOwnerEmail.value = state.requestOwnerEmail;
+      }
+
+      els.requesterEmail?.addEventListener('input', (event) => {
+        state.requesterEmail = event.target.value.trim();
+        localStorage.setItem(STORAGE_KEYS.requesterEmail, state.requesterEmail);
+      });
+
+      if (els.requesterEmail) {
+        els.requesterEmail.value = state.requesterEmail;
       }
 
       els.basketRequestMessage?.addEventListener('input', (event) => {
@@ -300,7 +334,7 @@
       this.render();
     },
 
-    openDrawer({ focusMessage = false } = {}) {
+    openDrawer({ focusRequestDetails = false } = {}) {
       this.render();
       els.basketDrawer?.removeAttribute('hidden');
       els.drawerOverlay?.removeAttribute('hidden');
@@ -308,8 +342,8 @@
       requestAnimationFrame(() => {
         els.basketDrawer?.classList.add('active');
         els.drawerOverlay?.classList.add('active');
-        if (focusMessage) {
-          els.basketRequestMessage?.focus();
+        if (focusRequestDetails) {
+          (state.requesterEmail ? els.basketRequestMessage : els.requesterEmail)?.focus();
         }
       });
     },
@@ -327,11 +361,18 @@
     async requestDocuments() {
       if (!state.basket.length) return;
 
+      if (!isValidEmail(state.requesterEmail)) {
+        showMessage(els.searchError, 'Please enter your email address before checkout.');
+        els.requesterEmail?.focus();
+        return;
+      }
+
       try {
         const data = await api.requestBulkDownload(
           state.basket.map((item) => item.document_id),
           els.searchInput?.value || '',
           state.requestOwnerEmail,
+          state.requesterEmail,
           state.requestMessage,
         );
 
@@ -349,14 +390,17 @@
     render() {
       basketCountEls.forEach((el) => {
         el.textContent = state.basket.length;
+        el.classList.remove('bump');
+        void el.offsetWidth;
+        el.classList.add('bump');
       });
 
       if (!els.basketList) return;
 
       if (els.requestBasketBtn) els.requestBasketBtn.disabled = state.basket.length === 0;
       if (els.clearBasketBtn) els.clearBasketBtn.disabled = state.basket.length === 0;
-      if (els.basketRequestMessageField) {
-        els.basketRequestMessageField.hidden = state.basket.length === 0;
+      if (els.basketRequestDetails) {
+        els.basketRequestDetails.hidden = state.basket.length === 0;
       }
 
       if (!state.basket.length) {
@@ -460,6 +504,10 @@
         state.documentCategory = event.target.value || 'all';
         this.renderCurrent();
       });
+      els.documentsList?.addEventListener('click', (event) => {
+        const deleteBtn = event.target.closest('[data-delete-document]');
+        if (deleteBtn) this.delete(deleteBtn.dataset.deleteDocument, deleteBtn.dataset.filename);
+      });
     },
 
     async load({ clearStatus = true } = {}) {
@@ -479,6 +527,27 @@
         );
       } finally {
         setBusy(els.documentsLoading, false);
+      }
+    },
+
+    async delete(documentId, filename = 'this document') {
+      if (!documentId) return;
+      if (!window.confirm(`Delete "${filename}" from the app?`)) return;
+
+      clearMessage(els.documentsError);
+      clearMessage(els.documentsMessage);
+
+      try {
+        const data = await api.deleteDocument(documentId);
+        basket.remove(documentId);
+        await this.load({ clearStatus: false });
+        showMessage(els.documentsMessage, data.message || 'Document deleted.');
+        metrics.refreshDocumentCount();
+      } catch (error) {
+        showMessage(
+          els.documentsError,
+          error.message || 'Unable to delete document. Please try again.',
+        );
       }
     },
 
@@ -663,7 +732,7 @@
 
       if (action === 'request') {
         basket.add(documentId, filename);
-        basket.openDrawer({ focusMessage: true });
+        basket.openDrawer({ focusRequestDetails: true });
       }
     },
 
@@ -869,6 +938,7 @@
         <div class="documents-row documents-head" role="row">
           <div role="columnheader">Title</div>
           <div role="columnheader">Category</div>
+          <div role="columnheader">Actions</div>
         </div>
         ${items.map(renderDocumentRow).join('')}
       </div>
@@ -876,6 +946,7 @@
   }
 
   function renderDocumentRow(item) {
+    const documentId = escapeHTML(item.document_id);
     const title = escapeHTML(item.title || 'Untitled document');
     const category = escapeHTML(item.category || 'Uncategorized');
 
@@ -883,6 +954,11 @@
       <div class="documents-row" role="row">
         <div class="documents-title" role="cell">${title}</div>
         <div role="cell"><span class="pill">${category}</span></div>
+        <div role="cell" class="documents-actions">
+          <button type="button" class="document-delete-btn" data-delete-document="${documentId}" data-filename="${title}" aria-label="Delete ${title}" title="Delete">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
       </div>
     `;
   }

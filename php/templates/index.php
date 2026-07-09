@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Upload, search, and request compliance documents with keyword-based analysis and categorization." />
   <title>IBC Document Intelligence</title>
-  <link rel="stylesheet" href="/static/style.css?v=17" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23171411'/%3E%3Cpath d='M6 3h8l5 5v13H6z' fill='none' stroke='%23fbf7f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M14 3v5h5' fill='none' stroke='%23fbf7f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 13h6' fill='none' stroke='%23fbf7f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 17h4' fill='none' stroke='%23fbf7f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css?v=20" />
 </head>
 <body>
+  <div class="grain-overlay" aria-hidden="true"></div>
   <div class="app-shell" id="app-shell">
     <aside class="sidebar" aria-label="Workspace sidebar">
       <div class="sidebar-top">
@@ -68,20 +71,10 @@
 
     <main class="main-panel">
       <header class="topbar">
-        <nav class="top-nav" aria-label="Primary navigation">
-          <button class="top-nav-link tab-link active" data-tab="upload-tab" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
-            Upload
-          </button>
-          <button class="top-nav-link tab-link" data-tab="search-tab" type="button">
-            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
-            Search
-          </button>
-          <button class="top-nav-link tab-link" data-tab="documents-tab" type="button">
-            <svg viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
-            Documents
-          </button>
-        </nav>
+        <div class="topbar-context">
+          <p class="topbar-eyebrow">Compliance workspace</p>
+          <h2 class="topbar-title" id="topbar-title">Upload documents</h2>
+        </div>
 
         <button class="basket-trigger" id="basket-trigger" type="button" aria-haspopup="dialog" aria-controls="basket-drawer">
           <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 8.5H8L6 3H3"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>
@@ -89,13 +82,6 @@
           <span class="basket-count" data-basket-count>0</span>
         </button>
       </header>
-
-      <div class="main-banner">
-        <div class="banner-copy">
-          <p class="eyebrow">Compliance workspace</p>
-          <h2>Review documents, find keyword evidence, and request files from one focused workspace.</h2>
-        </div>
-      </div>
 
       <div id="upload-tab" class="tab-content active">
         <header class="page-header">
@@ -279,6 +265,6 @@
     window.KEYWORD_SUGGESTIONS = <?= json_encode($keywords) ?> || [];
     window.DEFAULT_REQUEST_OWNER_EMAIL = <?= json_encode($requestOwnerEmail) ?>;
   </script>
-  <script src="/static/app.js?v=17"></script>
+  <script src="/static/app.js?v=20"></script>
 </body>
 </html>

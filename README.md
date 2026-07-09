@@ -4,6 +4,11 @@
 ## Overview
 This project implements a secure document intelligence platform for IBC Amsterdam consultants.
 
+**The PHP app in [`php/`](php/) is the primary, actively developed version** — it runs on
+plain PHP shared hosting (e.g. MijnDomein.nl), which has no Python support. The original
+Python/FastAPI app at the repo root is kept for local development and reference, but is no
+longer the default deployment target.
+
 The platform supports:
 - Intelligent document classification
 - Multi-format document processing
@@ -93,7 +98,50 @@ ibc-document-intelligence/
 
 ## Getting Started
 
-### Windows quick start
+### PHP app (default — deploy this one)
+
+From the `php/` folder, using PHP's built-in dev server:
+
+```powershell
+cd php
+php -d enable_post_data_reading=0 -S 127.0.0.1:8000 index.php
+```
+
+Open `http://127.0.0.1:8000/`. The `enable_post_data_reading=0` flag is required for
+multi-file uploads to work correctly on PHP's built-in server (Apache reads it from
+`php/.user.ini` in production instead).
+
+Dependencies (`smalot/pdfparser`, `phpmailer/phpmailer`) are pre-built and committed under
+`php/vendor/`, since most PHP shared hosts (including MijnDomein.nl) only offer FTP access,
+not SSH/Composer. If you need to rebuild them:
+
+```bash
+cd php
+composer install
+```
+
+**Email setup**: create `php/.env` (already blocked from web access via `.htaccess`) with:
+
+```text
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your.email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=your.email@gmail.com
+REQUEST_OWNER_EMAIL=s.e.vdongen@gmail.com
+```
+
+Use an app password or SMTP token from your email provider instead of your normal account
+password. The request owner can also be changed in Settings while the app is running.
+
+**Deploying to MijnDomein.nl (or similar PHP-only shared hosting)**: upload the entire
+`php/` folder — including `vendor/` — via FTP to the hosting account's web root, then point
+the domain's DNS at that hosting account. No server-side Composer or build step is needed.
+
+### Python app (legacy / local development)
+
+The original FastAPI implementation still lives at the repo root and is useful for local
+prototyping, but is not the deployment target anymore.
 
 Run one of these from the project folder:
 
@@ -124,10 +172,7 @@ Useful options:
 
 From VS Code, you can also run `Terminal > Run Task... > Start IBC app`.
 
-### Email request setup
-
-The Request and Checkout buttons send an email through SMTP when these environment
-variables are set before starting the app:
+Email setup uses the same SMTP environment variables as the PHP app, set before starting:
 
 ```powershell
 $env:SMTP_HOST="smtp.gmail.com"
@@ -139,11 +184,7 @@ $env:REQUEST_OWNER_EMAIL="s.e.vdongen@gmail.com"
 .\start.ps1
 ```
 
-Use an app password or SMTP token from your email provider instead of your normal
-account password. The request owner can be changed in Settings while the app is
-running, or later by changing `REQUEST_OWNER_EMAIL` before startup.
-
-### Manual start
+Manual start, without the script:
 
 ```bash
 python -m venv .venv

@@ -1,7 +1,15 @@
 (() => {
+  const TAB_TITLES = {
+    'upload-tab': 'Upload documents',
+    'search-tab': 'Search keywords',
+    'documents-tab': 'Browse documents',
+    'settings-tab': 'Workspace settings',
+  };
+
   const SELECTORS = {
     appShell: 'app-shell',
     sidebarToggle: 'sidebar-toggle',
+    topbarTitle: 'topbar-title',
     basketTrigger: 'basket-trigger',
     basketDrawer: 'basket-drawer',
     basketClose: 'basket-close',
@@ -109,6 +117,32 @@
     if (el) el.textContent = text;
   }
 
+  function animateCount(el, toValue) {
+    if (!el) return;
+
+    const from = parseInt(el.textContent, 10);
+    const to = Number(toValue) || 0;
+
+    if (!Number.isFinite(from) || from === to) {
+      el.textContent = to;
+      return;
+    }
+
+    const duration = 420;
+    const start = performance.now();
+
+    function tick(now) {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - (1 - progress) ** 3;
+      el.textContent = Math.round(from + (to - from) * eased);
+
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = to;
+    }
+
+    requestAnimationFrame(tick);
+  }
+
   function show(el) {
     if (!el) return;
     el.classList.add('active');
@@ -154,6 +188,13 @@
     async fetchDocuments() {
       const response = await fetch('/documents');
       return parseJsonResponse(response, 'Could not load documents.');
+    },
+
+    async deleteDocument(documentId) {
+      const response = await fetch(`/documents/${encodeURIComponent(documentId)}`, {
+        method: 'DELETE',
+      });
+      return parseJsonResponse(response, 'Could not delete document.');
     },
 
     async uploadDocuments(files) {
@@ -252,6 +293,14 @@
         content.classList.toggle('active', content.id === tabName);
       });
 
+      if (els.topbarTitle && TAB_TITLES[tabName]) {
+        els.topbarTitle.style.opacity = '0';
+        window.setTimeout(() => {
+          els.topbarTitle.textContent = TAB_TITLES[tabName];
+          els.topbarTitle.style.opacity = '1';
+        }, 90);
+      }
+
       if (tabName === 'documents-tab') {
         documents.load();
       }
@@ -274,7 +323,7 @@
     async refreshDocumentCount() {
       try {
         const data = await api.fetchDocumentCount();
-        setText(els.docCount, data.total_documents || 0);
+        animateCount(els.docCount, data.total_documents || 0);
       } catch (error) {
         console.error('Could not refresh document count:', error);
       }
@@ -309,7 +358,15 @@
 
       state.basket.push({ document_id: documentId, filename });
       this.save();
+      this.pulseTrigger();
       showMessage(els.searchMessage, `"${filename}" added to your basket.`);
+    },
+
+    pulseTrigger() {
+      if (!els.basketTrigger) return;
+      els.basketTrigger.classList.remove('pulse');
+      void els.basketTrigger.offsetWidth;
+      els.basketTrigger.classList.add('pulse');
     },
 
     remove(documentId) {
@@ -383,6 +440,9 @@
     render() {
       basketCountEls.forEach((el) => {
         el.textContent = state.basket.length;
+        el.classList.remove('bump');
+        void el.offsetWidth;
+        el.classList.add('bump');
       });
 
       if (!els.basketList) return;
@@ -494,6 +554,10 @@
         state.documentCategory = event.target.value || 'all';
         this.renderCurrent();
       });
+      els.documentsList?.addEventListener('click', (event) => {
+        const deleteBtn = event.target.closest('[data-delete-document]');
+        if (deleteBtn) this.delete(deleteBtn.dataset.deleteDocument, deleteBtn.dataset.filename);
+      });
     },
 
     async load({ clearStatus = true } = {}) {
@@ -513,6 +577,27 @@
         );
       } finally {
         setBusy(els.documentsLoading, false);
+      }
+    },
+
+    async delete(documentId, filename = 'this document') {
+      if (!documentId) return;
+      if (!window.confirm(`Delete "${filename}" from the app?`)) return;
+
+      clearMessage(els.documentsError);
+      clearMessage(els.documentsMessage);
+
+      try {
+        const data = await api.deleteDocument(documentId);
+        basket.remove(documentId);
+        await this.load({ clearStatus: false });
+        showMessage(els.documentsMessage, data.message || 'Document deleted.');
+        metrics.refreshDocumentCount();
+      } catch (error) {
+        showMessage(
+          els.documentsError,
+          error.message || 'Unable to delete document. Please try again.',
+        );
       }
     },
 
@@ -822,8 +907,10 @@
           ${results.length} remaining top match${results.length === 1 ? '' : 'es'} sorted by match count
         </button>
 
-        <div id="other-results-list" class="collapsible-content" style="display: none;">
-          ${results.map((item) => renderResultCard(item, false)).join('')}
+        <div id="other-results-list" class="collapsible-content">
+          <div class="collapsible-inner">
+            ${results.map((item) => renderResultCard(item, false)).join('')}
+          </div>
         </div>
       </div>
     `;
@@ -903,6 +990,7 @@
         <div class="documents-row documents-head" role="row">
           <div role="columnheader">Title</div>
           <div role="columnheader">Category</div>
+          <div role="columnheader">Actions</div>
         </div>
         ${items.map(renderDocumentRow).join('')}
       </div>
@@ -910,6 +998,7 @@
   }
 
   function renderDocumentRow(item) {
+    const documentId = escapeHTML(item.document_id);
     const title = escapeHTML(item.title || 'Untitled document');
     const category = escapeHTML(item.category || 'Uncategorized');
 
@@ -917,6 +1006,11 @@
       <div class="documents-row" role="row">
         <div class="documents-title" role="cell">${title}</div>
         <div role="cell"><span class="pill">${category}</span></div>
+        <div role="cell" class="documents-actions">
+          <button type="button" class="document-delete-btn" data-delete-document="${documentId}" data-filename="${title}" aria-label="Delete ${title}" title="Delete">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
       </div>
     `;
   }
@@ -928,11 +1022,10 @@
     if (!toggleBtn || !content) return;
 
     toggleBtn.addEventListener('click', () => {
-      const isOpen = content.style.display !== 'none';
-      content.style.display = isOpen ? 'none' : 'grid';
+      const isOpen = content.classList.toggle('expanded');
 
       const icon = toggleBtn.querySelector('.toggle-icon');
-      if (icon) icon.textContent = isOpen ? '+' : '-';
+      if (icon) icon.textContent = isOpen ? '-' : '+';
     });
   }
 
